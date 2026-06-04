@@ -265,7 +265,7 @@ export const MedicineForm: React.FC<MedicineFormProps> = ({
                           </div>
                           {suggestions.map((s, idx) => (
                             <button
-                              key={s.id || idx}
+                              key={`suggestion-${s.id || idx}-${idx}`}
                               type="button"
                               onClick={() => applySuggestion(s)}
                               className="w-full text-left p-3 hover:bg-white/5 flex items-center justify-between border-b border-white/5 last:border-0 transition-colors"

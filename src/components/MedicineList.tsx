@@ -142,165 +142,179 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
         </AnimatePresence>
       </div>
 
-      {medicines.map((med, index) => {
-        const status = getExpiryStatus(med.expirationDate);
-        const [year, month, day] = med.expirationDate.split('-').map(Number);
-        const expiry = new Date();
-        if (year && month && day) {
-          expiry.setFullYear(year, month - 1, day);
-        }
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        expiry.setHours(0, 0, 0, 0);
-        
-        const diffTime = expiry.getTime() - today.getTime();
-        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      <AnimatePresence mode="popLayout">
+        {medicines.map((med, index) => {
+          const status = getExpiryStatus(med.expirationDate);
+          const [year, month, day] = med.expirationDate.split('-').map(Number);
+          const expiry = new Date();
+          if (year && month && day) {
+            expiry.setFullYear(year, month - 1, day);
+          }
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          expiry.setHours(0, 0, 0, 0);
+          
+          const diffTime = expiry.getTime() - today.getTime();
+          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-        const effectiveThreshold = alertThreshold === 90 ? 92 : alertThreshold;
-        const isExpired = diffDays < 0;
-        const isExpiringSoon = diffDays >= 0 && diffDays <= 10;
-        const isExpiringAlert = diffDays > 10 && diffDays <= effectiveThreshold;
-        const isLowQuantity = med.quantity !== undefined && med.quantity <= lowQuantityThreshold;
-        const needsAttention = !med.taken && (isExpired || isExpiringSoon || isExpiringAlert || isLowQuantity);
-        const isSelected = selectedIds.has(med.id);
+          const effectiveThreshold = alertThreshold === 90 ? 92 : alertThreshold;
+          const isExpired = diffDays < 0;
+          const isExpiringSoon = diffDays >= 0 && diffDays <= 10;
+          const isExpiringAlert = diffDays > 10 && diffDays <= effectiveThreshold;
+          const isLowQuantity = med.quantity !== undefined && med.quantity <= lowQuantityThreshold;
+          const needsAttention = !med.taken && (isExpired || isExpiringSoon || isExpiringAlert || isLowQuantity);
+          const isSelected = selectedIds.has(med.id);
 
-        return (
-          <motion.div
-            key={`${med.id}-${index}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ 
-              opacity: med.taken ? 0.5 : 1, 
-              y: 0,
-              ...(needsAttention && !isSelected ? {
-                boxShadow: isExpired 
-                  ? ['0px 0px 0px rgba(239,68,68,0)', '0px 0px 15px rgba(239,68,68,0.15)', '0px 0px 0px rgba(239,68,68,0)']
-                  : isExpiringSoon 
-                    ? ['0px 0px 0px rgba(249,115,22,0)', '0px 0px 15px rgba(249,115,22,0.15)', '0px 0px 0px rgba(249,115,22,0)']
-                    : isExpiringAlert || isLowQuantity
-                      ? ['0px 0px 0px rgba(234,179,8,0)', '0px 0px 15px rgba(234,179,8,0.15)', '0px 0px 0px rgba(234,179,8,0)']
-                      : undefined,
-              } : {})
-            }}
-            transition={{ 
-              delay: index * 0.05,
-              ...(needsAttention && !isSelected ? {
-                boxShadow: { repeat: Infinity, duration: 2, ease: "easeInOut" }
-              } : {})
-            }}
-            onClick={() => {
-              if (isSelectionMode) {
-                toggleSelection(med.id);
-              } else if (!med.taken) {
-                onEdit(med);
-              }
-            }}
-            className={`w-full text-left group relative overflow-hidden border rounded-3xl p-5 transition-all backdrop-blur-md ${
-              isSelectionMode ? 'cursor-pointer' : ''
-            } ${
-              isSelected ? 'bg-white/10 border-white/40' :
-              med.taken ? 'bg-white/5 border-white/5 grayscale' :
-              isExpired ? 'bg-white/[0.01] border-red-500/30 hover:border-red-500/50 hover:bg-white/[0.04]' :
-              isExpiringSoon ? 'bg-white/[0.01] border-orange-500/30 hover:border-orange-500/50 hover:bg-white/[0.04]' :
-              isExpiringAlert ? 'bg-white/[0.01] border-yellow-500/30 hover:border-yellow-500/50 hover:bg-white/[0.04]' :
-              isLowQuantity ? 'bg-white/[0.01] border-yellow-500/30 hover:border-yellow-500/50 hover:bg-white/[0.04]' :
-              'bg-white/[0.01] border-white/10 hover:border-white/20 hover:bg-white/[0.04]'
-            }`}
-          >
-            {med.imageUrl && (
-              <div className="absolute top-0 right-0 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
-                <img 
-                  src={med.imageUrl} 
-                  alt="" 
-                  className="w-full h-full object-cover rounded-bl-3xl"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            )}
-            
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex items-start gap-2.5 flex-1 overflow-hidden">
-                {isSelectionMode && (
-                  <div className="mt-1 text-white/40 shrink-0">
-                    {isSelected ? <CheckSquare size={18} className="text-white" /> : <Square size={18} />}
-                  </div>
-                )}
-                <div className={`flex-1 min-w-0 ${med.taken && !isSelectionMode ? 'cursor-default' : 'cursor-pointer'}`}>
-                  <h3 className={`font-semibold text-base sm:text-lg tracking-tight transition-colors flex items-center gap-1.5 ${med.taken ? 'text-white/40 line-through' : 'text-white group-hover:text-white'}`}>
-                    <span className="truncate">{med.name}</span>
-                    <span className="shrink-0 scale-90 sm:scale-100">{med.form && MEDICINE_FORM_ICONS[med.form]}</span>
-                  </h3>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <span className="flex items-center gap-1 text-white/40 text-[10px] sm:text-xs">
-                      <Package size={10} className="sm:w-[12px]" />
-                      {med.dosage}
-                    </span>
-                    {med.schedule && (
-                      <span className="flex items-center gap-1 text-indigo-400 text-[10px] sm:text-xs font-medium">
-                        <Clock size={10} className="sm:w-[12px]" />
-                        <span className="truncate max-w-[120px]">{med.schedule}</span>
+          return (
+            <motion.div
+              layout
+              key={`${med.id}-${index}`}
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              animate={{ 
+                opacity: med.taken ? 0.5 : 1, 
+                scale: 1,
+                y: 0,
+                ...(needsAttention && !isSelected ? {
+                  boxShadow: isExpired 
+                    ? ['0px 0px 0px rgba(239,68,68,0)', '0px 0px 15px rgba(239,68,68,0.15)', '0px 0px 0px rgba(239,68,68,0)']
+                    : isExpiringSoon 
+                      ? ['0px 0px 0px rgba(249,115,22,0)', '0px 0px 15px rgba(249,115,22,0.15)', '0px 0px 0px rgba(249,115,22,0)']
+                      : isExpiringAlert || isLowQuantity
+                        ? ['0px 0px 0px rgba(234,179,8,0)', '0px 0px 15px rgba(234,179,8,0.15)', '0px 0px 0px rgba(234,179,8,0)']
+                        : undefined,
+                } : {}),
+                transition: {
+                  layout: { type: "spring", stiffness: 350, damping: 30 },
+                  duration: 0.25
+                }
+              }}
+              exit={{ 
+                opacity: 0, 
+                scale: 0.94, 
+                y: -15,
+                transition: { duration: 0.2 }
+              }}
+              transition={{ 
+                delay: index * 0.03,
+                ...(needsAttention && !isSelected ? {
+                  boxShadow: { repeat: Infinity, duration: 2, ease: "easeInOut" }
+                } : {})
+              }}
+              onClick={() => {
+                if (isSelectionMode) {
+                  toggleSelection(med.id);
+                } else if (!med.taken) {
+                  onEdit(med);
+                }
+              }}
+              className={`w-full text-left group relative overflow-hidden border rounded-3xl p-5 transition-all backdrop-blur-md ${
+                isSelectionMode ? 'cursor-pointer' : ''
+              } ${
+                isSelected ? 'bg-white/10 border-white/40' :
+                med.taken ? 'bg-white/5 border-white/5 grayscale' :
+                isExpired ? 'bg-white/[0.01] border-red-500/30 hover:border-red-500/50 hover:bg-white/[0.04]' :
+                isExpiringSoon ? 'bg-white/[0.01] border-orange-500/30 hover:border-orange-500/50 hover:bg-white/[0.04]' :
+                isExpiringAlert ? 'bg-white/[0.01] border-yellow-500/30 hover:border-yellow-500/50 hover:bg-white/[0.04]' :
+                isLowQuantity ? 'bg-white/[0.01] border-yellow-500/30 hover:border-yellow-500/50 hover:bg-white/[0.04]' :
+                'bg-white/[0.01] border-white/10 hover:border-white/20 hover:bg-white/[0.04]'
+              }`}
+            >
+              {med.imageUrl && (
+                <div className="absolute top-0 right-0 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
+                  <img 
+                    src={med.imageUrl} 
+                    alt="" 
+                    className="w-full h-full object-cover rounded-bl-3xl"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+              
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-start gap-2.5 flex-1 overflow-hidden">
+                  {isSelectionMode && (
+                    <div className="mt-1 text-white/40 shrink-0">
+                      {isSelected ? <CheckSquare size={18} className="text-white" /> : <Square size={18} />}
+                    </div>
+                  )}
+                  <div className={`flex-1 min-w-0 ${med.taken && !isSelectionMode ? 'cursor-default' : 'cursor-pointer'}`}>
+                    <h3 className={`font-semibold text-base sm:text-lg tracking-tight transition-colors flex items-center gap-1.5 ${med.taken ? 'text-white/40 line-through' : 'text-white group-hover:text-white'}`}>
+                      <span className="truncate">{med.name}</span>
+                      <span className="shrink-0 scale-90 sm:scale-100">{med.form && MEDICINE_FORM_ICONS[med.form]}</span>
+                    </h3>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="flex items-center gap-1 text-white/40 text-[10px] sm:text-xs">
+                        <Package size={10} className="sm:w-[12px]" />
+                        {med.dosage}
                       </span>
-                    )}
-                    {!med.taken && (
-                      <span className={`flex items-center gap-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${status.bg} ${status.color}`}>
-                        {status.label}
-                      </span>
-                    )}
+                      {med.schedule && (
+                        <span className="flex items-center gap-1 text-indigo-400 text-[10px] sm:text-xs font-medium">
+                          <Clock size={10} className="sm:w-[12px]" />
+                          <span className="truncate max-w-[120px]">{med.schedule}</span>
+                        </span>
+                      )}
+                      {!med.taken && (
+                        <span className={`flex items-center gap-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${status.bg} ${status.color}`}>
+                          {status.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              {!isSelectionMode && (
-                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                  {!med.taken && med.quantity !== undefined && med.quantity > 0 && (
+                {!isSelectionMode && (
+                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                    {!med.taken && med.quantity !== undefined && med.quantity > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReduceQuantity(med);
+                        }}
+                        className="p-2 sm:p-2.5 bg-white/5 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90"
+                        title="Reduce quantity"
+                      >
+                        <Minus size={16} />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onReduceQuantity(med);
+                        onToggleTaken(med);
                       }}
-                      className="p-2 sm:p-2.5 bg-white/5 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90"
-                      title="Reduce quantity"
+                      className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-90 ${
+                        med.taken 
+                          ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' 
+                          : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'
+                      }`}
+                      title={med.taken ? "Mark as not taken" : "Mark as taken"}
                     >
-                      <Minus size={16} />
+                      <CheckCircle2 size={18} />
                     </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleTaken(med);
-                    }}
-                    className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-90 ${
-                      med.taken 
-                        ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' 
-                        : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'
-                    }`}
-                    title={med.taken ? "Mark as not taken" : "Mark as taken"}
-                  >
-                    <CheckCircle2 size={18} />
-                  </button>
-                </div>
-              )}
-            </div>
-            
-            <div className={`flex items-center justify-between mt-2 pt-2 border-t border-white/5 ${isSelectionMode ? 'ml-7' : ''}`}>
-              <div className="flex items-center gap-1.5 text-white/30 text-[10px] font-mono">
-                <Calendar size={12} />
-                <span>EXP: {expiry.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                  </div>
+                )}
               </div>
               
-              {!med.taken && med.quantity !== undefined && (
-                <div className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isLowQuantity ? 'text-yellow-500 bg-yellow-500/10' : 'text-white/40 bg-white/5'}`}>
-                  {med.quantity} LEFT
+              <div className={`flex items-center justify-between mt-2 pt-2 border-t border-white/5 ${isSelectionMode ? 'ml-7' : ''}`}>
+                <div className="flex items-center gap-1.5 text-white/30 text-[10px] font-mono">
+                  <Calendar size={12} />
+                  <span>EXP: {expiry.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
                 </div>
-              )}
-            </div>
+                
+                {!med.taken && med.quantity !== undefined && (
+                  <div className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isLowQuantity ? 'text-yellow-500 bg-yellow-500/10' : 'text-white/40 bg-white/5'}`}>
+                    {med.quantity} LEFT
+                  </div>
+                )}
+              </div>
 
-            {med.usageInstructions && !med.taken && (
-              <p className={`mt-2 text-white/30 text-[10px] line-clamp-1 italic ${isSelectionMode ? 'ml-7' : ''}`}>
-                {med.usageInstructions}
-              </p>
-            )}
-          </motion.div>
-        );
-      })}
+              {med.usageInstructions && !med.taken && (
+                <p className={`mt-2 text-white/30 text-[10px] line-clamp-1 italic ${isSelectionMode ? 'ml-7' : ''}`}>
+                  {med.usageInstructions}
+                </p>
+              )}
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>

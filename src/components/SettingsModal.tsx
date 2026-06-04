@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Trash2, Bell, Palette, ShieldAlert, LogOut, Mail, RotateCcw, AlertTriangle } from 'lucide-react';
+import { X, Trash2, Bell, Palette, ShieldAlert, LogOut, Mail, RotateCcw, AlertTriangle, Key, Copy, Check } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Medicine } from '../types';
 
@@ -24,6 +24,12 @@ interface SettingsModalProps {
   deletedMedicines: Medicine[];
   onRestore: (id: string) => void;
   onPermanentDelete: (id: string) => void;
+  // Security Props
+  e2eeEnabled: boolean;
+  onToggleE2ee: (val: boolean) => void;
+  rawKeyString: string;
+  captchaEnabled: boolean;
+  onToggleCaptcha: (val: boolean) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -46,9 +52,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   medicines,
   deletedMedicines,
   onRestore,
-  onPermanentDelete
+  onPermanentDelete,
+  e2eeEnabled,
+  onToggleE2ee,
+  rawKeyString,
+  captchaEnabled,
+  onToggleCaptcha
 }) => {
   const [showConfirmClear, setShowConfirmClear] = React.useState(false);
+  const [copiedKey, setCopiedKey] = React.useState(false);
   const [cookieConsent, setCookieConsent] = React.useState(() => {
     try {
       return localStorage.getItem('mediscan_cookie_consent') !== 'denied';
@@ -65,6 +77,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { name: 'Sky', value: '#0ea5e9' },
     { name: 'Amber', value: '#d97706' },
   ];
+
+  const handleCopyKey = () => {
+    if (!rawKeyString) return;
+    try {
+      navigator.clipboard.writeText(rawKeyString);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy E2EE Master Key:', err);
+    }
+  };
 
   return (
     <motion.div 
@@ -107,10 +130,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <p className="text-xs text-white/30 italic px-1">No recently deleted items.</p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                {deletedMedicines.map(med => {
+                {deletedMedicines.map((med, idx) => {
                   const daysLeft = med.deletedAt ? Math.max(0, 15 - Math.floor((Date.now() - med.deletedAt) / (1000 * 60 * 60 * 24))) : 15;
                   return (
-                    <div key={med.id} className="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/5">
+                    <div key={`${med.id}-${idx}`} className="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/5">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-white/80">{med.name}</span>
                         <span className="text-[10px] text-white/40 flex items-center gap-1">
@@ -279,6 +302,92 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               ))}
             </div>
+          </section>
+
+          {/* SECURITY & CRYPTOGRAPHIC PRIVACY */}
+          <section className="space-y-4 pt-4 border-t border-white/5">
+            <div className="flex items-center gap-2 text-cyan-400">
+              <ShieldAlert size={18} />
+              <h3 className="text-sm font-bold uppercase tracking-widest">Vault Security & Privacy</h3>
+            </div>
+
+            {/* E2EE Toggle */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-white/80 block">Zero-Knowledge Vault (E2EE)</span>
+                  <span className="text-[10px] text-white/40 block leading-tight">Encrypt patient & medication info client-side</span>
+                </div>
+                <button 
+                  onClick={() => onToggleE2ee(!e2eeEnabled)}
+                  className={`w-12 h-6 rounded-full transition-all relative ${e2eeEnabled ? 'bg-cyan-500' : 'bg-white/10'}`}
+                >
+                  <div 
+                    className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${e2eeEnabled ? 'left-7' : 'left-1'}`} 
+                    style={{ backgroundColor: e2eeEnabled ? '#111111' : '' }}
+                  />
+                </button>
+              </div>
+
+              {/* Master Recovery Key Panel */}
+              {e2eeEnabled && rawKeyString && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="bg-cyan-500/5 hover:bg-cyan-500/10 border border-cyan-500/15 rounded-2xl p-4 space-y-3 mt-2 transition-colors"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest flex items-center gap-1">
+                      <Key size={12} /> Master Recovery Key
+                    </span>
+                    <button 
+                      onClick={handleCopyKey}
+                      className="p-1.5 bg-white/5 hover:bg-white/10 text-cyan-400 hover:text-cyan-300 rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold"
+                    >
+                      {copiedKey ? (
+                        <>
+                          <Check size={12} className="text-emerald-400" />
+                          <span className="text-emerald-400">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={12} />
+                          <span>Copy Key</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  
+                  <div className="bg-black/40 rounded-xl px-3 py-2 border border-white/5 text-[10px] font-mono break-all text-white/70 select-all max-h-16 overflow-y-auto">
+                    {rawKeyString}
+                  </div>
+
+                  <p className="text-[9px] text-cyan-500/60 leading-relaxed font-semibold">
+                    ⚠️ Google Cloud or DawaLens administrators can NEVER reconstruct this key. If you check this app on multiple devices, import this key string to restore your vault. Key loss results in permanent loss of medication readability.
+                  </p>
+                </motion.div>
+              )}
+            </div>
+
+            {/* Action CAPTCHA Toggle */}
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <span className="text-xs font-bold text-white/80 block">Interlock CAPTCHA Guard</span>
+                <span className="text-[10px] text-white/40 block leading-tight">Prompt secure puzzle on adds, edits, or wipes</span>
+              </div>
+              <button 
+                onClick={() => onToggleCaptcha(!captchaEnabled)}
+                className={`w-12 h-6 rounded-full transition-all relative ${captchaEnabled ? 'bg-cyan-500' : 'bg-white/10'}`}
+              >
+                <div 
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${captchaEnabled ? 'left-7' : 'left-1'}`} 
+                  style={{ backgroundColor: captchaEnabled ? '#111111' : '' }}
+                />
+              </button>
+            </div>
+            <p className="text-[10px] text-white/30 px-1 leading-normal">
+              Reduces automated database attacks and malicious tampering. Highly recommended for public environments.
+            </p>
           </section>
 
           {/* Cookie Preferences */}

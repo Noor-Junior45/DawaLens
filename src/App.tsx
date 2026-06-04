@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Camera, Download, Upload, Info, Settings, Search, X, History, Trash2, ShieldAlert, CheckCircle2, Bot, Stethoscope } from 'lucide-react';
+import { Plus, Camera, Download, Upload, Info, Settings, Search, X, History, Trash2, ShieldAlert, CheckCircle2, Bot, Stethoscope, Mail, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import { Medicine } from './types';
@@ -8,10 +8,13 @@ import { MedicineForm } from './components/MedicineForm';
 import { MedicineList } from './components/MedicineList';
 import { SettingsModal } from './components/SettingsModal';
 import { ChatView } from './components/ChatView';
+import { MailboxModal } from './components/MailboxModal';
+import { DailySummaryWidget } from './components/DailySummaryWidget';
+import { HealthSyncModal } from './components/HealthSyncModal';
 import { extractMedicineData } from './services/geminiService';
 import { 
   auth, db, storage, googleProvider, signInWithPopup, signOut, onAuthStateChanged, 
-  collection, doc, setDoc, deleteDoc, updateDoc, writeBatch, onSnapshot, query, where, orderBy, getDoc, getDocs, User,
+  collection, doc, setDoc, addDoc, deleteDoc, updateDoc, writeBatch, onSnapshot, query, where, orderBy, getDoc, getDocs, User,
   handleFirestoreError, OperationType, deleteField, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   ref, uploadBytes, getDownloadURL, deleteObject, serverTimestamp, uploadBytesResumable
 } from './firebase';
@@ -21,6 +24,11 @@ import { checkDrugInteractions, InteractionResult } from './services/geminiServi
 
 import { CookieConsentBanner } from './components/CookieConsentBanner';
 
+// Cryptographic E2EE & CAPTCHA security imports
+import { generateMasterE2EEKey, importMasterKey, encryptField, decryptField } from './utils/crypto';
+import { CaptchaGate } from './components/CaptchaGate';
+import { triggerLightHaptic, triggerSuccessHaptic } from './utils/haptics';
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -28,7 +36,9 @@ export default function App() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHealthSyncOpen, setIsHealthSyncOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isMailboxOpen, setIsMailboxOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -44,6 +54,93 @@ export default function App() {
   const [browserNotificationsEnabled, setBrowserNotificationsEnabled] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
+
+  // E2EE Zero-Knowledge State Variables
+  const [e2eeEnabled, setE2eeEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mediscan_e2ee_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [rawKeyString, setRawKeyString] = useState<string>(() => {
+    try {
+      return localStorage.getItem('mediscan_e2ee_key') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [masterKey, setMasterKey] = useState<CryptoKey | null>(null);
+  const [rawMedicines, setRawMedicines] = useState<Medicine[]>([]);
+
+  // CAPTCHA Guard States
+  const [captchaEnabled, setCaptchaEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mediscan_captcha_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [isCaptchaOpen, setIsCaptchaOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ type: string; execute: () => void } | null>(null);
+
+  // Derive cryptographic key object when key or E2EE state is altered
+  useEffect(() => {
+    const loadCryptoKey = async () => {
+      if (e2eeEnabled && rawKeyString) {
+        try {
+          const key = await importMasterKey(rawKeyString);
+          setMasterKey(key);
+        } catch (e) {
+          console.error("Failed to import E2EE key:", e);
+        }
+      } else {
+        setMasterKey(null);
+      }
+    };
+    loadCryptoKey();
+  }, [e2eeEnabled, rawKeyString]);
+
+  // Seamless generic CAPTCHA validator helper
+  const runActionWithCaptcha = (actionType: string, callback: () => void) => {
+    if (captchaEnabled) {
+      setPendingAction({ type: actionType, execute: callback });
+      setIsCaptchaOpen(true);
+    } else {
+      callback();
+    }
+  };
+
+  const handleToggleE2ee = async (enabled: boolean) => {
+    try {
+      if (enabled) {
+        let keyStr = rawKeyString;
+        if (!keyStr) {
+          keyStr = await generateMasterE2EEKey();
+          setRawKeyString(keyStr);
+          localStorage.setItem('mediscan_e2ee_key', keyStr);
+        }
+        setE2eeEnabled(true);
+        localStorage.setItem('mediscan_e2ee_enabled', 'true');
+        const key = await importMasterKey(keyStr);
+        setMasterKey(key);
+      } else {
+        setE2eeEnabled(false);
+        localStorage.setItem('mediscan_e2ee_enabled', 'false');
+        setMasterKey(null);
+      }
+    } catch (e) {
+      console.error("Failed to change encryption toggle:", e);
+    }
+  };
+
+  const handleToggleCaptcha = (enabled: boolean) => {
+    setCaptchaEnabled(enabled);
+    localStorage.setItem('mediscan_captcha_enabled', enabled ? 'true' : 'false');
+  };
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isEmailLoginOpen, setIsEmailLoginOpen] = useState(false);
@@ -100,6 +197,7 @@ export default function App() {
   // Sync Medicines from Firestore
   useEffect(() => {
     if (!user) {
+      setRawMedicines([]);
       setMedicines([]);
       return;
     }
@@ -114,7 +212,7 @@ export default function App() {
       const medsData = snapshot.docs.map(doc => ({ ...doc.data() } as Medicine));
       // Deduplicate by ID to prevent React "duplicate key" warnings during sync lag or accidental duplicates
       const uniqueMeds = Array.from(new Map(medsData.map(m => [m.id, m])).values());
-      setMedicines(uniqueMeds);
+      setRawMedicines(uniqueMeds);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'medicines');
     });
@@ -122,60 +220,216 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // Background Notification Check
+  // Client-Side Zero-Knowledge Cryptographic Decryptor Loop
   useEffect(() => {
-    if (!browserNotificationsEnabled || medicines.length === 0) return;
+    let active = true;
 
-    const checkAndNotify = () => {
-      if (Notification.permission !== 'granted') return;
+    const decryptAll = async () => {
+      const decrypted = await Promise.all(rawMedicines.map(async (med) => {
+        if (med.isEncrypted) {
+          if (e2eeEnabled && masterKey) {
+            try {
+              const name = med.ivMap?.name ? await decryptField(med.name, med.ivMap.name, masterKey) : med.name;
+              const dosage = med.ivMap?.dosage ? await decryptField(med.dosage, med.ivMap.dosage, masterKey) : med.dosage;
+              const usageInstructions = med.ivMap?.usageInstructions ? await decryptField(med.usageInstructions, med.ivMap.usageInstructions, masterKey) : med.usageInstructions;
+              const schedule = med.ivMap?.schedule && med.schedule ? await decryptField(med.schedule, med.ivMap.schedule, masterKey) : med.schedule;
 
+              return {
+                ...med,
+                name,
+                dosage,
+                usageInstructions,
+                schedule,
+                _isDecrypted: true
+              };
+            } catch (err) {
+              console.error(`E2EE Decrypt mismatch or error on ${med.id}:`, err);
+              return {
+                ...med,
+                name: "🔐 [E2EE Vault Locked]",
+                dosage: "[Locked]",
+                usageInstructions: "[Key mismatch or missing context]",
+                schedule: "[Locked]",
+                _isDecrypted: false
+              };
+            }
+          } else {
+            return {
+              ...med,
+              name: "🔐 [E2EE Vault Locked]",
+              dosage: "[Locked]",
+              usageInstructions: "[Encryption enabled but key context missing in browser]",
+              schedule: "[Locked]",
+              _isDecrypted: false
+            };
+          }
+        }
+        return med;
+      }));
+
+      if (active) {
+        setMedicines(decrypted);
+      }
+    };
+
+    decryptAll();
+    return () => {
+      active = false;
+    };
+  }, [rawMedicines, masterKey, e2eeEnabled]);
+
+  // Background Notification Check (Browser and Email)
+  useEffect(() => {
+    if (medicines.length === 0) return;
+
+    const checkAndNotify = async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0];
 
-      const expiringMeds = medicines.filter(m => {
-        const [year, month, day] = m.expirationDate.split('-').map(Number);
-        const expiry = new Date();
-        if (year && month && day) {
-          expiry.setFullYear(year, month - 1, day);
-        } else {
-          return false;
-        }
-        expiry.setHours(0, 0, 0, 0);
-        
-        const diffTime = expiry.getTime() - today.getTime();
-        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        
-        const effectiveThreshold = alertThreshold === 90 ? 92 : alertThreshold;
-        
-        // Notify if expiring exactly on the threshold, or exactly in 10 days, or exactly today
-        return diffDays === effectiveThreshold || diffDays === 10 || diffDays === 0;
-      });
+      // 1. Browser Notification Alert
+      if (browserNotificationsEnabled && Notification.permission === 'granted') {
+        const expiringMeds = medicines.filter(m => {
+          if (m.isDeleted) return false;
+          const [year, month, day] = m.expirationDate.split('-').map(Number);
+          const expiry = new Date();
+          if (year && month && day) {
+            expiry.setFullYear(year, month - 1, day);
+          } else {
+            return false;
+          }
+          expiry.setHours(0, 0, 0, 0);
+          
+          const diffTime = expiry.getTime() - today.getTime();
+          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+          const effectiveThreshold = alertThreshold === 90 ? 92 : alertThreshold;
+          
+          return diffDays === effectiveThreshold || diffDays === 10 || diffDays === 0;
+        });
 
-      if (expiringMeds.length > 0) {
-        let lastNotifiedDate = null;
-        try {
-          lastNotifiedDate = localStorage.getItem('mediscan_last_notified');
-        } catch (e) {
-          console.warn('LocalStorage access denied during notification check:', e);
-        }
-        
-        const todayStr = today.toISOString().split('T')[0];
-
-        if (lastNotifiedDate !== todayStr) {
-          const medNames = expiringMeds.map(m => m.name).join(', ');
+        if (expiringMeds.length > 0) {
+          let lastNotifiedDate = null;
           try {
-            new Notification('Mediscan Alert', {
-              body: `You have ${expiringMeds.length} medicine(s) expiring soon: ${medNames}`,
-              icon: '/favicon.ico'
-            });
+            lastNotifiedDate = localStorage.getItem('mediscan_last_notified');
           } catch (e) {
-            console.error('Failed to trigger notification:', e);
+            console.warn('LocalStorage access denied:', e);
           }
           
-          try {
-            localStorage.setItem('mediscan_last_notified', todayStr);
-          } catch (e) {
-            // Ignore storage errors
+          if (lastNotifiedDate !== todayStr) {
+            const medNames = expiringMeds.map(m => m.name).join(', ');
+            try {
+              new Notification('Mediscan Alert', {
+                body: `You have ${expiringMeds.length} medicine(s) expiring soon: ${medNames}`,
+                icon: '/favicon.ico'
+              });
+              localStorage.setItem('mediscan_last_notified', todayStr);
+            } catch (e) {
+              console.error('Failed to trigger notification:', e);
+            }
+          }
+        }
+      }
+
+      // 2. Email Notification Alerts
+      if (emailNotificationsEnabled && user?.email) {
+        // A. Filter medicines for expiration alerts
+        const expiringMeds = medicines.filter(m => {
+          if (m.isDeleted) return false;
+          const [year, month, day] = m.expirationDate.split('-').map(Number);
+          const expiry = new Date();
+          if (year && month && day) {
+            expiry.setFullYear(year, month - 1, day);
+          } else {
+            return false;
+          }
+          expiry.setHours(0, 0, 0, 0);
+          
+          const diffTime = expiry.getTime() - today.getTime();
+          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+          const effectiveThreshold = alertThreshold === 90 ? 92 : alertThreshold;
+          
+          return diffDays === effectiveThreshold || diffDays === 10 || diffDays === 0;
+        });
+
+        // B. Filter medicines for low quantity alerts
+        const lowQuantityMeds = medicines.filter(m => {
+          if (m.isDeleted) return false;
+          return m.quantity !== undefined && m.quantity <= lowQuantityThreshold;
+        });
+
+        // Loop expiring meds and trigger if not already sent today
+        for (const m of expiringMeds) {
+          const storageKey = `mediscan_email_exp_${m.id}_${todayStr}`;
+          if (!localStorage.getItem(storageKey)) {
+            try {
+              const subject = `⚠️ Expiration Alert: ${m.name} is Expiring Soon`;
+              const text = `Mediscan alert: Your medicine ${m.name} (${m.dosage}) is expiring on ${m.expirationDate}.`;
+              const html = `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e1e8ed; border-radius: 20px; background-color: #ffffff;">
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="background-color: #fff8f6; color: #ff5232; font-size: 32px; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 12px; font-weight: bold;">⚠️</div>
+                    <h2 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Medicine Expiry Alert</h2>
+                    <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">Mediscan Automated Alerts</p>
+                  </div>
+                  <hr style="border: 0; border-top: 1px solid #e1e8ed; margin-bottom: 24px;" />
+                  <div style="background-color: #fafbfc; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+                    <p style="margin: 0 0 8px 0; color: #657786; font-size: 12px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Medication Details</p>
+                    <h3 style="margin: 0; color: #1a1a1a; font-size: 20px; font-weight: 700;">${m.name} (${m.dosage})</h3>
+                    <p style="margin: 8px 0 0 0; color: #d32f2f; font-size: 14px; font-weight: bold;">📅 Expiration Date: ${m.expirationDate}</p>
+                  </div>
+                  <p style="color: #24292e; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
+                    This is an automated safety alert from your DawaLens vault. We detected that ${m.name} is entering its warning expiration threshold. Please check the medicine container's condition before use.
+                  </p>
+                </div>
+              `;
+
+              await addDoc(collection(db, 'mail'), {
+                to: user.email,
+                message: { subject, text, html },
+                timestamp: serverTimestamp()
+              });
+              localStorage.setItem(storageKey, 'true');
+            } catch (err) {
+              console.error("Auto expiry email alert failed:", err);
+            }
+          }
+        }
+
+        // Loop low quantity meds and trigger if not already sent today
+        for (const m of lowQuantityMeds) {
+          const storageKey = `mediscan_email_qty_${m.id}_${todayStr}`;
+          if (!localStorage.getItem(storageKey)) {
+            try {
+              const subject = `💊 Low Stock Alert: Refill ${m.name}`;
+              const text = `Mediscan alert: Your medicine ${m.name} quantity is down to ${m.quantity}. Please replenish your stocks soon.`;
+              const html = `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e1e8ed; border-radius: 20px; background-color: #ffffff;">
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="background-color: #f0f7ff; color: #0070f3; font-size: 32px; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 12px; font-weight: bold;">💊</div>
+                    <h2 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Low Stock Warning</h2>
+                    <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">Mediscan Replenishment Engine</p>
+                  </div>
+                  <hr style="border: 0; border-top: 1px solid #e1e8ed; margin-bottom: 24px;" />
+                  <div style="background-color: #fafbfc; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+                    <p style="margin: 0 0 8px 0; color: #657786; font-size: 12px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Current Inventory</p>
+                    <h3 style="margin: 0; color: #1a1a1a; font-size: 20px; font-weight: 700;">${m.name}</h3>
+                    <p style="margin: 8px 0 0 0; color: #0070f3; font-size: 14px; font-weight: bold;">⚠️ Remaining Stock: ${m.quantity} unit(s) left</p>
+                  </div>
+                  <p style="color: #24292e; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
+                    Your supply has fallen below the alerts threshold of ${lowQuantityThreshold} units set in settings. Refill soon to prevent treatment interruption.
+                  </p>
+                </div>
+              `;
+
+              await addDoc(collection(db, 'mail'), {
+                to: user.email,
+                message: { subject, text, html },
+                timestamp: serverTimestamp()
+              });
+              localStorage.setItem(storageKey, 'true');
+            } catch (err) {
+              console.error("Auto quantity email alert failed:", err);
+            }
           }
         }
       }
@@ -187,7 +441,7 @@ export default function App() {
     // Then check periodically (e.g., every 12 hours)
     const interval = setInterval(checkAndNotify, 12 * 60 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [medicines, browserNotificationsEnabled, alertThreshold]);
+  }, [medicines, browserNotificationsEnabled, emailNotificationsEnabled, alertThreshold, lowQuantityThreshold, user]);
 
   useEffect(() => {
     const applyThemeAndAccent = () => {
@@ -380,6 +634,12 @@ export default function App() {
   };
 
   const handleSave = async (data: Partial<Medicine>) => {
+    runActionWithCaptcha("save", () => {
+      executeSave(data);
+    });
+  };
+
+  const executeSave = async (data: Partial<Medicine>) => {
     if (!user || isSaving) return;
     setIsSaving(true);
 
@@ -437,6 +697,35 @@ export default function App() {
         });
       }
       
+      // Compute Cryptographic E2EE representations if enabled
+      let finalDataToSave = { ...firestoreData };
+      let ivMap: { [key: string]: string } = {};
+      let isEncrypted = false;
+
+      if (e2eeEnabled && masterKey) {
+        isEncrypted = true;
+        if (firestoreData.name) {
+          const enc = await encryptField(firestoreData.name.trim(), masterKey);
+          finalDataToSave.name = enc.cypherText;
+          ivMap.name = enc.iv;
+        }
+        if (firestoreData.dosage) {
+          const enc = await encryptField(firestoreData.dosage, masterKey);
+          finalDataToSave.dosage = enc.cypherText;
+          ivMap.dosage = enc.iv;
+        }
+        if (firestoreData.usageInstructions) {
+          const enc = await encryptField(firestoreData.usageInstructions, masterKey);
+          finalDataToSave.usageInstructions = enc.cypherText;
+          ivMap.usageInstructions = enc.iv;
+        }
+        if (firestoreData.schedule) {
+          const enc = await encryptField(firestoreData.schedule, masterKey);
+          finalDataToSave.schedule = enc.cypherText;
+          ivMap.schedule = enc.iv;
+        }
+      }
+
       const normalizedName = (firestoreData.name || '').toLowerCase().trim();
       const existingMed = medicines.find(m => 
         m.name.toLowerCase().trim() === normalizedName &&
@@ -456,15 +745,22 @@ export default function App() {
           quantity: newQuantity,
           userId: user.uid,
           imageUrl: imageUrl || existingMed.imageUrl || null,
-          schedule: firestoreData.schedule || existingMed.schedule || null,
           updatedAt: serverTimestamp() // Ensure cloud sync timestamp
         };
 
+        if (isEncrypted) {
+          updateData.isEncrypted = true;
+          updateData.ivMap = { ...(existingMed.ivMap || {}), ...ivMap };
+        }
+
         if (existingMed.dosage === 'N/A' && firestoreData.dosage) {
-          updateData.dosage = firestoreData.dosage;
+          updateData.dosage = finalDataToSave.dosage;
         }
         if (!existingMed.usageInstructions && firestoreData.usageInstructions) {
-          updateData.usageInstructions = firestoreData.usageInstructions;
+          updateData.usageInstructions = finalDataToSave.usageInstructions;
+        }
+        if (firestoreData.schedule || existingMed.schedule) {
+          updateData.schedule = finalDataToSave.schedule || existingMed.schedule || null;
         }
 
         batch.set(medRef, updateData, { merge: true });
@@ -486,12 +782,17 @@ export default function App() {
         const medRef = doc(db, 'medicines', editingMedicine.id);
         const updateData: any = { 
           ...editingMedicine, 
-          ...firestoreData, 
+          ...finalDataToSave, 
           userId: user.uid,
           imageUrl: imageUrl || editingMedicine.imageUrl || null,
           updatedAt: serverTimestamp()
         };
         
+        if (isEncrypted) {
+          updateData.isEncrypted = true;
+          updateData.ivMap = ivMap;
+        }
+
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
             updateData[key] = deleteField();
@@ -516,19 +817,24 @@ export default function App() {
         const id = crypto.randomUUID();
         const newMed: any = {
           id,
-          name: firestoreData.name || 'Unknown',
-          dosage: firestoreData.dosage || 'N/A',
-          expirationDate: firestoreData.expirationDate || new Date().toISOString().split('T')[0],
-          usageInstructions: firestoreData.usageInstructions || '',
-          schedule: firestoreData.schedule || '',
+          name: finalDataToSave.name || 'Unknown',
+          dosage: finalDataToSave.dosage || 'N/A',
+          expirationDate: finalDataToSave.expirationDate || new Date().toISOString().split('T')[0],
+          usageInstructions: finalDataToSave.usageInstructions || '',
+          schedule: finalDataToSave.schedule || '',
           createdAt: serverTimestamp(),
           userId: user.uid,
-          form: firestoreData.form || 'other',
+          form: finalDataToSave.form || 'other',
           imageUrl: imageUrl || null
         };
 
         if (firestoreData.quantity !== undefined) {
           newMed.quantity = firestoreData.quantity;
+        }
+
+        if (isEncrypted) {
+          newMed.isEncrypted = true;
+          newMed.ivMap = ivMap;
         }
 
         batch.set(doc(db, 'medicines', id), newMed);
@@ -546,6 +852,7 @@ export default function App() {
 
       // Commit all changes in ONE atomic operation
       await batch.commit();
+      triggerSuccessHaptic();
 
       setIsFormOpen(false);
       setEditingMedicine(null);
@@ -610,6 +917,7 @@ export default function App() {
     try {
       const medRef = doc(db, 'medicines', medicine.id);
       await setDoc(medRef, { taken: !medicine.taken }, { merge: true });
+      triggerSuccessHaptic();
 
       const historyId = crypto.randomUUID();
       await setDoc(doc(db, `medicines/${medicine.id}/history`, historyId), {
@@ -638,6 +946,7 @@ export default function App() {
       }
       
       await setDoc(medRef, updateData, { merge: true });
+      triggerSuccessHaptic();
 
       const historyId = crypto.randomUUID();
       await setDoc(doc(db, `medicines/${medicine.id}/history`, historyId), {
@@ -654,6 +963,12 @@ export default function App() {
   };
 
   const confirmClearData = async () => {
+    runActionWithCaptcha("clear", () => {
+      executeClearData();
+    });
+  };
+
+  const executeClearData = async () => {
     if (!user || isSaving) return;
     setIsSaving(true);
     try {
@@ -1125,6 +1440,23 @@ export default function App() {
                 <Download size={16} className="sm:w-[18px] sm:h-[18px]" />
               </button>
               <button 
+                onClick={() => setIsMailboxOpen(true)}
+                className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all relative"
+                title="In-App Mailbox & Testing Panel"
+              >
+                <Mail size={16} className="sm:w-[18px] sm:h-[18px]" />
+                {emailNotificationsEnabled && (
+                  <span className="absolute top-[5px] right-[5px] w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                )}
+              </button>
+              <button 
+                onClick={() => setIsHealthSyncOpen(true)}
+                className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                title="Apple Health & Google Fit Synchronization"
+              >
+                <Heart size={16} className="sm:w-[18px] sm:h-[18px] text-rose-400" />
+              </button>
+              <button 
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"
               >
@@ -1198,6 +1530,14 @@ export default function App() {
             </p>
           </div>
         </div>
+
+        {/* Daily Summary & Wellness Dashboard Widget */}
+        <DailySummaryWidget 
+          medicines={medicines}
+          onToggleTaken={handleToggleTaken}
+          lowQuantityThreshold={lowQuantityThreshold}
+          alertThreshold={alertThreshold}
+        />
 
         {/* Filters */}
         <div className="px-4 mb-6 flex flex-wrap gap-2">
@@ -1289,7 +1629,10 @@ export default function App() {
           <div className="w-px h-8 bg-white/10 mx-1"></div>
 
           <button 
-            onClick={() => setIsCameraOpen(true)}
+            onClick={() => {
+              triggerLightHaptic();
+              setIsCameraOpen(true);
+            }}
             className="flex-none py-2 px-4 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 active:scale-95"
             style={{ color: 'var(--accent-color)' }}
           >
@@ -1393,8 +1736,51 @@ export default function App() {
             deletedMedicines={deletedMedicines}
             onRestore={handleRestore}
             onPermanentDelete={handlePermanentDelete}
+            // Security props
+            e2eeEnabled={e2eeEnabled}
+            onToggleE2ee={handleToggleE2ee}
+            rawKeyString={rawKeyString}
+            captchaEnabled={captchaEnabled}
+            onToggleCaptcha={handleToggleCaptcha}
           />
         )}
+
+        {isMailboxOpen && (
+          <MailboxModal 
+            onClose={() => setIsMailboxOpen(false)}
+            user={user}
+            medicines={medicines}
+          />
+        )}
+
+        {isHealthSyncOpen && (
+          <HealthSyncModal 
+            onClose={() => setIsHealthSyncOpen(false)}
+            medicines={medicines}
+            accentColor={accentColor}
+          />
+        )}
+
+        {/* Security CAPTCHA Gate Modal Overlay */}
+        <AnimatePresence>
+          {isCaptchaOpen && pendingAction && (
+            <CaptchaGate
+              actionName={pendingAction.type === 'clear' ? "Clear All Medication History" : "Save Cloud Medication Info"}
+              onSuccess={() => {
+                if (pendingAction.execute) {
+                  pendingAction.execute();
+                }
+                setIsCaptchaOpen(false);
+                setPendingAction(null);
+              }}
+              onCancel={() => {
+                setIsCaptchaOpen(false);
+                setPendingAction(null);
+                setAlertMessage("Action canceled because security CAPTCHA was not solved.");
+              }}
+            />
+          )}
+        </AnimatePresence>
 
         {isGuideOpen && (
           <motion.div 

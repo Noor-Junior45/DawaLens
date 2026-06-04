@@ -25,6 +25,9 @@ export interface Medicine {
   isDeleted?: boolean;
   deletedAt?: number;
   form?: MedicineForm;
+  // Dynamic Cryptographic E2EE fields
+  isEncrypted?: boolean;
+  ivMap?: { [key: string]: string };
 }
 
 export interface ChatMessage {
