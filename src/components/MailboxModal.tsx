@@ -70,8 +70,11 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
         } as MailDocument;
       });
 
+      // Deduplicate by ID to prevent duplicate keys
+      const uniqueMail = Array.from(new Map(mailList.map(m => [m.id, m])).values());
+
       // Sort in-memory to dodge custom indexing requirements
-      const sorted = mailList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      const sorted = uniqueMail.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setEmails(sorted);
       setIsLoading(false);
     }, (error) => {

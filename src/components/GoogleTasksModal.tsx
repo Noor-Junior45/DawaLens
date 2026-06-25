@@ -438,8 +438,8 @@ export function GoogleTasksModal({ onClose, medicines, accentColor }: GoogleTask
                         onChange={(e) => setSelectedListId(e.target.value)}
                         className="w-full bg-[#1c1c1c] border border-white/10 rounded-2xl p-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
                       >
-                        {taskLists.map(list => (
-                          <option key={list.id} value={list.id}>{list.title}</option>
+                        {taskLists.map((list, idx) => (
+                          <option key={list.id || `list-${idx}`} value={list.id}>{list.title}</option>
                         ))}
                         {taskLists.length === 0 && <option value="">No lists found. Please create one!</option>}
                       </select>
@@ -479,14 +479,14 @@ export function GoogleTasksModal({ onClose, medicines, accentColor }: GoogleTask
                 </div>
 
                 <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                  {activeMeds.map(med => {
+                  {activeMeds.map((med, index) => {
                     // Check if this particular med has an active unmatched task
                     const taskTitle = `💊 Take Medication: ${med.name} (${med.dosage || 'Assorted'})`;
                     const hasSyncedTask = existingTasks.some(t => t.title === taskTitle && t.status !== 'completed');
 
                     return (
                       <div 
-                        key={med.id} 
+                        key={`${med.id}-${index}`} 
                         className="bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 rounded-2xl p-3 flex items-center justify-between gap-3 transition-all"
                       >
                         <div className="min-w-0">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Medicine } from '../types';
-import { Calendar, Package, ChevronRight, AlertCircle, CheckCircle2, Pill, AlertTriangle, XCircle, Clock, Trash2, CheckSquare, Square, Minus } from 'lucide-react';
+import { Calendar, Package, ChevronRight, AlertCircle, CheckCircle2, Pill, AlertTriangle, XCircle, Clock, Trash2, CheckSquare, Square, Minus, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MEDICINE_FORM_ICONS } from '../constants';
 
@@ -12,9 +12,10 @@ interface MedicineListProps {
   onDeleteMultiple: (ids: string[]) => void;
   lowQuantityThreshold: number;
   alertThreshold: number;
+  onToggleLike?: (medicine: Medicine) => void;
 }
 
-export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, onToggleTaken, onReduceQuantity, onDeleteMultiple, lowQuantityThreshold, alertThreshold }) => {
+export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, onToggleTaken, onReduceQuantity, onDeleteMultiple, lowQuantityThreshold, alertThreshold, onToggleLike }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -60,7 +61,7 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
     if (year && month && day) {
       expiry.setFullYear(year, month - 1, day);
     } else {
-      return { label: 'Invalid Date', color: 'text-gray-500', bg: 'bg-gray-500/10', Icon: Clock };
+      return { label: 'Invalid Date', color: 'text-slate-500', bg: 'bg-slate-100', Icon: Clock };
     }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -71,25 +72,25 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
     
     const effectiveThreshold = alertThreshold === 90 ? 92 : alertThreshold;
     
-    if (diffDays < 0) return { label: 'Expired', color: 'text-red-500', bg: 'bg-red-500/10', Icon: XCircle };
-    if (diffDays === 0) return { label: 'Expiring Today', color: 'text-orange-500', bg: 'bg-orange-500/10', Icon: AlertTriangle };
-    if (diffDays <= 10) return { label: 'Expiring Soon (10d)', color: 'text-orange-500', bg: 'bg-orange-500/10', Icon: AlertTriangle };
+    if (diffDays < 0) return { label: 'Expired', color: 'text-[#ea4335]', bg: 'bg-rose-50 border border-rose-100', Icon: XCircle };
+    if (diffDays === 0) return { label: 'Expiring Today', color: 'text-[#f2a154]', bg: 'bg-amber-50 border border-amber-100', Icon: AlertTriangle };
+    if (diffDays <= 10) return { label: 'Expiring Soon (10d)', color: 'text-[#f2a154]', bg: 'bg-amber-50 border border-amber-100', Icon: AlertTriangle };
     if (diffDays <= effectiveThreshold) {
       const label = alertThreshold === 90 ? 'Expiring in 3mo' : `Expiring in ${alertThreshold}d`;
-      return { label, color: 'text-yellow-500', bg: 'bg-yellow-500/10', Icon: Clock };
+      return { label, color: 'text-[#ab47bc]', bg: 'bg-purple-50 border border-purple-100', Icon: Clock };
     }
-    if (diffDays <= 180) return { label: 'Expiring in 6mo', color: 'text-emerald-400', bg: 'bg-emerald-500/10', Icon: Clock };
-    return { label: 'Safe', color: 'text-emerald-500', bg: 'bg-emerald-500/10', Icon: CheckCircle2 };
+    if (diffDays <= 180) return { label: 'Expiring in 6mo', color: 'text-[#1a73e8]', bg: 'bg-blue-50 border border-blue-100', Icon: Clock };
+    return { label: 'Safe', color: 'text-[#0f9d58]', bg: 'bg-emerald-50 border border-emerald-100', Icon: CheckCircle2 };
   };
 
   if (medicines.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-        <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
-          <Package className="text-white/20" size={32} />
+        <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 border border-[#e3e2e0] shadow-sm">
+          <Package className="text-slate-400" size={32} />
         </div>
-        <h3 className="text-white font-medium text-lg mb-2">No medicines tracked</h3>
-        <p className="text-white/40 text-sm max-w-[240px]">
+        <h3 className="text-[#1f1f1f] font-semibold text-lg mb-2">No medicines tracked</h3>
+        <p className="text-[#5f6368] text-sm max-w-[240px]">
           Start by scanning a medicine label or adding one manually.
         </p>
       </div>
@@ -108,7 +109,7 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
               setIsSelectionMode(true);
             }
           }}
-          className="text-sm text-white/60 hover:text-white transition-colors"
+          className="text-sm text-slate-500 hover:text-slate-800 font-medium transition-colors"
         >
           {isSelectionMode ? 'Cancel Selection' : 'Select Multiple'}
         </button>
@@ -123,15 +124,15 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
             >
               <button 
                 onClick={toggleSelectAll}
-                className="text-sm text-white/60 hover:text-white transition-colors flex items-center gap-1.5"
+                className="text-sm text-slate-500 hover:text-slate-800 font-medium transition-colors flex items-center gap-1.5"
               >
-                {selectedIds.size === medicines.length ? <CheckSquare size={16} /> : <Square size={16} />}
+                {selectedIds.size === medicines.length ? <CheckSquare size={16} className="text-[#3c40c6]" /> : <Square size={16} />}
                 All
               </button>
               {selectedIds.size > 0 && (
                 <button 
                   onClick={handleDeleteSelected}
-                  className="text-sm text-red-400 hover:text-red-300 transition-colors flex items-center gap-1.5 bg-red-500/10 px-3 py-1.5 rounded-full"
+                  className="text-sm text-red-600 hover:text-red-700 transition-colors flex items-center gap-1.5 bg-red-50 px-3 py-1.5 rounded-full border border-red-100 font-semibold"
                 >
                   <Trash2 size={14} />
                   Delete ({selectedIds.size})
@@ -207,20 +208,20 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
                   onEdit(med);
                 }
               }}
-              className={`w-full text-left group relative overflow-hidden border rounded-3xl p-5 transition-all backdrop-blur-md ${
+              className={`w-full text-left group relative overflow-hidden border rounded-3xl p-5 transition-all ${
                 isSelectionMode ? 'cursor-pointer' : ''
               } ${
-                isSelected ? 'bg-white/10 border-white/40' :
-                med.taken ? 'bg-white/5 border-white/5 grayscale' :
-                isExpired ? 'bg-white/[0.01] border-red-500/30 hover:border-red-500/50 hover:bg-white/[0.04]' :
-                isExpiringSoon ? 'bg-white/[0.01] border-orange-500/30 hover:border-orange-500/50 hover:bg-white/[0.04]' :
-                isExpiringAlert ? 'bg-white/[0.01] border-yellow-500/30 hover:border-yellow-500/50 hover:bg-white/[0.04]' :
-                isLowQuantity ? 'bg-white/[0.01] border-yellow-500/30 hover:border-yellow-500/50 hover:bg-white/[0.04]' :
-                'bg-white/[0.01] border-white/10 hover:border-white/20 hover:bg-white/[0.04]'
+                isSelected ? 'bg-white border-[#3c40c6] shadow-[0_12px_40px_rgba(60,64,198,0.06)]' :
+                med.taken ? 'bg-[#faf8f5]/60 border-[#e3e2e0]/60 opacity-60' :
+                isExpired ? 'bg-white border-red-200 hover:border-red-400 hover:bg-rose-50/10 shadow-[0_12px_32px_rgba(239,68,68,0.03)]' :
+                isExpiringSoon ? 'bg-white border-orange-200 hover:border-orange-400 hover:bg-amber-50/10 shadow-[0_12px_32px_rgba(249,115,22,0.03)]' :
+                isExpiringAlert ? 'bg-white border-purple-200 hover:border-purple-400 hover:bg-purple-50/10 shadow-[0_12px_32px_rgba(168,85,247,0.03)]' :
+                isLowQuantity ? 'bg-white border-amber-200 hover:border-amber-400 hover:bg-amber-50/10 shadow-[0_12px_32px_rgba(245,158,11,0.03)]' :
+                'bg-white border-[#e3e2e0] hover:border-[#1a73e8]/40 hover:bg-[#faf8f5]/40 shadow-[0_12px_32px_rgba(0,0,0,0.04)]'
               }`}
             >
               {med.imageUrl && (
-                <div className="absolute top-0 right-0 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none">
+                <div className="absolute top-0 right-0 w-24 h-24 opacity-20 group-hover:opacity-30 transition-opacity pointer-events-none">
                   <img 
                     src={med.imageUrl} 
                     alt="" 
@@ -233,23 +234,23 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-start gap-2.5 flex-1 overflow-hidden">
                   {isSelectionMode && (
-                    <div className="mt-1 text-white/40 shrink-0">
-                      {isSelected ? <CheckSquare size={18} className="text-white" /> : <Square size={18} />}
+                    <div className="mt-1 text-slate-400 shrink-0">
+                      {isSelected ? <CheckSquare size={18} className="text-[#3c40c6]" /> : <Square size={18} />}
                     </div>
                   )}
                   <div className={`flex-1 min-w-0 ${med.taken && !isSelectionMode ? 'cursor-default' : 'cursor-pointer'}`}>
-                    <h3 className={`font-semibold text-base sm:text-lg tracking-tight transition-colors flex items-center gap-1.5 ${med.taken ? 'text-white/40 line-through' : 'text-white group-hover:text-white'}`}>
+                    <h3 className={`font-bold text-base sm:text-lg tracking-tight transition-colors flex items-center gap-1.5 ${med.taken ? 'text-slate-400 line-through' : 'text-[#1f1f1f] group-hover:text-[#3c40c6]'}`}>
                       <span className="truncate">{med.name}</span>
                       <span className="shrink-0 scale-90 sm:scale-100">{med.form && MEDICINE_FORM_ICONS[med.form]}</span>
                     </h3>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="flex items-center gap-1 text-white/40 text-[10px] sm:text-xs">
-                        <Package size={10} className="sm:w-[12px]" />
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="flex items-center gap-1 text-slate-500 text-[11px] sm:text-xs">
+                        <Package size={12} className="text-slate-400" />
                         {med.dosage}
                       </span>
                       {med.schedule && (
-                        <span className="flex items-center gap-1 text-indigo-400 text-[10px] sm:text-xs font-medium">
-                          <Clock size={10} className="sm:w-[12px]" />
+                        <span className="flex items-center gap-1 text-[#1a73e8] text-[11px] sm:text-xs font-semibold">
+                          <Clock size={12} className="text-[#1a73e8]" />
                           <span className="truncate max-w-[120px]">{med.schedule}</span>
                         </span>
                       )}
@@ -262,14 +263,30 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
                   </div>
                 </div>
                 {!isSelectionMode && (
-                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    {/* Bookmark heart button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleLike && onToggleLike(med);
+                      }}
+                      className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-90 border ${
+                        med.liked 
+                          ? 'bg-rose-50 text-rose-500 border-rose-100 hover:bg-rose-100' 
+                          : 'bg-[#faf8f5]/60 text-slate-400 border-[#e3e2e0] hover:text-slate-600 hover:bg-slate-100'
+                      }`}
+                      title={med.liked ? "Remove like" : "Like medication"}
+                    >
+                      <Heart size={16} fill={med.liked ? "#ef4444" : "none"} />
+                    </button>
+
                     {!med.taken && med.quantity !== undefined && med.quantity > 0 && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onReduceQuantity(med);
                         }}
-                        className="p-2 sm:p-2.5 bg-white/5 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90"
+                        className="p-2 sm:p-2.5 bg-[#faf8f5]/60 border border-[#e3e2e0] rounded-full text-slate-500 hover:text-[#1f1f1f] hover:bg-slate-100 transition-all active:scale-90"
                         title="Reduce quantity"
                       >
                         <Minus size={16} />
@@ -280,34 +297,34 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
                         e.stopPropagation();
                         onToggleTaken(med);
                       }}
-                      className={`p-2 sm:p-2.5 rounded-full transition-all active:scale-90 ${
+                      className={`p-2 sm:p-2.5 border rounded-full transition-all active:scale-90 ${
                         med.taken 
-                          ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' 
-                          : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'
+                          ? 'bg-emerald-50 text-[#0f9d58] border-emerald-100 hover:bg-emerald-100/50' 
+                          : 'bg-[#faf8f5]/60 text-slate-500 border-[#e3e2e0] hover:bg-slate-100 hover:text-[#1f1f1f]'
                       }`}
                       title={med.taken ? "Mark as not taken" : "Mark as taken"}
                     >
-                      <CheckCircle2 size={18} />
+                      <CheckCircle2 size={16} />
                     </button>
                   </div>
                 )}
               </div>
               
-              <div className={`flex items-center justify-between mt-2 pt-2 border-t border-white/5 ${isSelectionMode ? 'ml-7' : ''}`}>
-                <div className="flex items-center gap-1.5 text-white/30 text-[10px] font-mono">
-                  <Calendar size={12} />
+              <div className={`flex items-center justify-between mt-2 pt-2 border-t border-slate-100 ${isSelectionMode ? 'ml-7' : ''}`}>
+                <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-mono font-medium">
+                  <Calendar size={12} className="text-slate-400" />
                   <span>EXP: {expiry.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
                 </div>
                 
                 {!med.taken && med.quantity !== undefined && (
-                  <div className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isLowQuantity ? 'text-yellow-500 bg-yellow-500/10' : 'text-white/40 bg-white/5'}`}>
+                  <div className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isLowQuantity ? 'text-[#f2a154] bg-orange-50 border border-orange-100' : 'text-slate-500 bg-slate-50 border border-slate-150'}`}>
                     {med.quantity} LEFT
                   </div>
                 )}
               </div>
 
               {med.usageInstructions && !med.taken && (
-                <p className={`mt-2 text-white/30 text-[10px] line-clamp-1 italic ${isSelectionMode ? 'ml-7' : ''}`}>
+                <p className={`mt-2 text-slate-500 text-[10px] line-clamp-1 italic ${isSelectionMode ? 'ml-7' : ''}`}>
                   {med.usageInstructions}
                 </p>
               )}

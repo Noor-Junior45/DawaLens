@@ -112,7 +112,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
         id: doc.id,
         ...doc.data()
       })) as ChatMessage[];
-      setMessages(msgData);
+      const uniqueMsgs = Array.from(new Map(msgData.map(m => [m.id, m])).values());
+      setMessages(uniqueMsgs);
     });
     return unsubscribe;
   }, [user]);
@@ -389,7 +390,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
               return (
                 <React.Fragment key={`chat-msg-${msg.id || ''}-${idx}`}>
                   {showDate && (
-                    <div className="flex justify-center my-10" key={`chat-date-${msg.id || ''}-${idx}`}>
+                    <div className="flex justify-center my-10">
                       <span className="bg-[#182229] text-white/50 text-[10px] font-black px-4 py-2 rounded-xl shadow-sm uppercase tracking-[0.2em] transition-all">
                         {formatMessageDate(msg.timestamp)}
                       </span>

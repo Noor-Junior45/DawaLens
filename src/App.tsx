@@ -55,6 +55,7 @@ export default function App() {
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(false);
   const [browserNotificationsEnabled, setBrowserNotificationsEnabled] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+  const [isLikedOnly, setIsLikedOnly] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
   // E2EE Zero-Knowledge State Variables
@@ -88,6 +89,24 @@ export default function App() {
 
   const [isCaptchaOpen, setIsCaptchaOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: string; execute: () => void } | null>(null);
+
+  // Google Site Verification Dynamic Header Injection
+  useEffect(() => {
+    try {
+      const savedToken = localStorage.getItem('google_site_verification_token');
+      if (savedToken && savedToken.trim()) {
+        const existing = document.querySelector('meta[name="google-site-verification"]');
+        if (existing) existing.remove();
+        
+        const meta = document.createElement('meta');
+        meta.name = 'google-site-verification';
+        meta.content = savedToken.trim();
+        document.head.appendChild(meta);
+      }
+    } catch (e) {
+      console.warn('Failed to load Google Site Verification meta tag:', e);
+    }
+  }, []);
 
   // Derive cryptographic key object when key or E2EE state is altered
   useEffect(() => {
@@ -935,6 +954,17 @@ export default function App() {
     }
   };
 
+  const handleToggleLike = async (medicine: Medicine) => {
+    if (!user) return;
+    try {
+      const medRef = doc(db, 'medicines', medicine.id);
+      await setDoc(medRef, { liked: !medicine.liked }, { merge: true });
+      triggerSuccessHaptic();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'medicines');
+    }
+  };
+
   const handleReduceQuantity = async (medicine: Medicine) => {
     if (!user || medicine.quantity === undefined || medicine.quantity <= 0) return;
     try {
@@ -1251,6 +1281,7 @@ export default function App() {
   const filteredMedicines = React.useMemo(() => {
     return medicines.filter(m => {
       if (m.isDeleted) return false;
+      if (isLikedOnly && !m.liked) return false;
 
       const searchLower = searchQuery.toLowerCase();
       const matchesSearch = 
@@ -1291,55 +1322,55 @@ export default function App() {
       if (sortOrder === 'desc') return b.name.toLowerCase().localeCompare(a.name.toLowerCase());
       return 0;
     });
-  }, [medicines, searchQuery, filter, sortOrder, alertThreshold]);
+  }, [medicines, searchQuery, filter, sortOrder, alertThreshold, isLikedOnly]);
 
   if (!isAuthReady) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-white/10 border-t-white rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#faf8f5] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-[#e3e2e0] border-t-[#3c40c6] rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen bg-[#faf8f5] text-[#1f1f1f] font-sans flex flex-col items-center justify-center p-6">
         <div className="max-w-md w-full text-center space-y-8">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             className="space-y-4"
           >
-            <div className="w-24 h-24 bg-white rounded-[32px] mx-auto flex items-center justify-center shadow-2xl shadow-white/10">
-              <Camera className="text-black" size={48} />
+            <div className="w-24 h-24 bg-white border border-[#e3e2e0] rounded-[32px] mx-auto flex items-center justify-center shadow-md">
+              <Camera className="text-[#3c40c6]" size={42} />
             </div>
-            <h1 className="text-5xl font-bold tracking-tighter bg-gradient-to-b from-white to-white/40 bg-clip-text text-transparent">
+            <h1 className="text-5xl font-black tracking-tight text-[#3c40c6]">
               Mediscan
             </h1>
-            <p className="text-white/40 text-sm font-medium uppercase tracking-[0.2em]">
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em]">
               Your AI Medicine Vault
             </p>
           </motion.div>
 
           <div className="space-y-6">
-            <p className="text-white/60 text-sm leading-relaxed">
+            <p className="text-slate-600 text-sm leading-relaxed font-medium">
               Securely store your medicine data in the cloud. Access your vault from any device, anytime.
             </p>
             <button
               onClick={handleLogin}
-              className="w-full py-5 bg-white text-black rounded-[24px] font-bold text-lg hover:bg-white/90 transition-all shadow-xl shadow-white/5 flex items-center justify-center gap-3"
+              className="w-full py-4.5 bg-white text-slate-800 border border-[#e3e2e0] rounded-[24px] font-bold text-base hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-3 active:scale-98"
             >
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
               Sign in with Google
             </button>
 
-            <div className="pt-4">
+            <div className="pt-2">
               <button 
                 onClick={() => {
                   setIsEmailLoginOpen(!isEmailLoginOpen);
                   setIsSignUp(false);
                 }}
-                className="text-white/40 text-xs hover:text-white transition-colors underline underline-offset-4"
+                className="text-slate-500 text-xs hover:text-[#3c40c6] transition-colors underline underline-offset-4 font-bold"
               >
                 {isEmailLoginOpen ? 'Hide Email Login' : 'Sign in with Email & Password'}
               </button>
@@ -1348,18 +1379,18 @@ export default function App() {
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-6 space-y-4 bg-white/[0.02] border border-white/10 rounded-[32px] p-6"
+                  className="mt-6 space-y-4 bg-white border border-[#e3e2e0] rounded-[32px] p-6 shadow-sm"
                 >
-                  <div className="flex gap-2 p-1 bg-white/5 rounded-2xl mb-2">
+                  <div className="flex gap-2 p-1 bg-[#faf8f5] border border-[#e3e2e0]/60 rounded-2xl mb-2">
                     <button 
                       onClick={() => setIsSignUp(false)}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${!isSignUp ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${!isSignUp ? 'bg-[#3c40c6] text-white shadow-xs' : 'text-slate-500 hover:text-[#3c40c6]'}`}
                     >
                       Login
                     </button>
                     <button 
                       onClick={() => setIsSignUp(true)}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${isSignUp ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${isSignUp ? 'bg-[#3c40c6] text-white shadow-xs' : 'text-slate-500 hover:text-[#3c40c6]'}`}
                     >
                       Sign Up
                     </button>
@@ -1370,10 +1401,10 @@ export default function App() {
                       id="auth-email"
                       name="email"
                       type="email" 
-                      placeholder="Email Address"
+                      placeholder="Email address"
                       value={email || ''}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-all text-sm"
+                      className="w-full bg-white border border-[#e3e2e0] rounded-xl py-3 px-4 focus:outline-none focus:border-[#3c40c6] focus:ring-2 focus:ring-[#3c40c6]/10 transition-all text-sm text-[#1f1f1f] placeholder:text-slate-400"
                       required
                     />
                     <input 
@@ -1383,19 +1414,19 @@ export default function App() {
                       placeholder="Password (min. 6 chars)"
                       value={password || ''}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-all text-sm"
+                      className="w-full bg-white border border-[#e3e2e0] rounded-xl py-3 px-4 focus:outline-none focus:border-[#3c40c6] focus:ring-2 focus:ring-[#3c40c6]/10 transition-all text-sm text-[#1f1f1f] placeholder:text-slate-400"
                       required
                     />
                     <button 
                       id="auth-submit-btn"
                       type="submit"
-                      className="w-full py-4 bg-white text-black rounded-xl font-bold text-sm hover:bg-white/90 transition-all shadow-lg"
+                      className="w-full py-3.5 bg-[#3c40c6] hover:bg-[#3c40c6]/90 text-white rounded-xl font-bold text-sm transition-all shadow-sm active:scale-98"
                     >
                       {isSignUp ? 'Create Account' : 'Sign In'}
                     </button>
                   </form>
                   
-                  <p className="text-[10px] text-white/30 text-center leading-relaxed">
+                  <p className="text-[10px] text-slate-400 text-center leading-relaxed font-semibold">
                     {isSignUp 
                       ? 'By creating an account, you agree to store your medicine data securely in our cloud vault.' 
                       : 'Welcome back! Your data will sync automatically.'}
@@ -1411,72 +1442,39 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-white selection:text-black">
+      <div className="min-h-screen bg-[#faf8f5] text-[#1f1f1f] font-sans selection:bg-[#3c40c6] selection:text-white">
       {/* Glossy Header */}
-      <header className="sticky top-0 z-40 bg-white/[0.01] backdrop-blur-3xl border-b border-white/5 px-3 py-3 sm:px-4 sm:py-4">
+      <header className="sticky top-0 z-40 bg-white border-b border-[#e3e2e0]/80 px-3 py-3 sm:px-4 sm:py-4 shadow-sm">
         <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tighter bg-gradient-to-b from-accent to-accent/40 bg-clip-text text-transparent">
+              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#3c40c6]">
                 DawaLens AI
               </h1>
-              <p className="text-white/40 text-[7px] sm:text-[10px] font-medium uppercase tracking-[0.2em] mt-0.5 sm:mt-1">
+              <p className="text-[#5f6368] text-[7px] sm:text-[10px] font-bold uppercase tracking-[0.2em] mt-0.5 sm:mt-1">
                 Your Digital Pharmacy
               </p>
             </div>
-            <div className="flex gap-1.5 sm:gap-2">
-              <label className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all cursor-pointer inline-flex items-center" title="Import from CSV">
-                <Upload size={16} className="sm:w-[18px] sm:h-[18px]" />
-                <input 
-                  type="file" 
-                  accept=".csv" 
-                  className="hidden" 
-                  onChange={handleImport}
-                />
-              </label>
-              <button 
-                onClick={exportToSheets}
-                className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"
-                title="Export to CSV (Google Sheets)"
-              >
-                <Download size={16} className="sm:w-[18px] sm:h-[18px]" />
-              </button>
-              <button 
-                onClick={() => setIsMailboxOpen(true)}
-                className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all relative"
-                title="In-App Mailbox & Testing Panel"
-              >
-                <Mail size={16} className="sm:w-[18px] sm:h-[18px]" />
-                {emailNotificationsEnabled && (
-                  <span className="absolute top-[5px] right-[5px] w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                )}
-              </button>
-              <button 
-                onClick={() => setIsHealthSyncOpen(true)}
-                className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"
-                title="Apple Health & Google Fit Synchronization"
-              >
-                <Heart size={16} className="sm:w-[18px] sm:h-[18px] text-rose-400" />
-              </button>
-              <button 
-                onClick={() => setIsGoogleTasksOpen(true)}
-                className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"
-                title="Google Tasks Medication Alarm Sync"
-              >
-                <ListTodo size={16} className="sm:w-[18px] sm:h-[18px] text-indigo-400" />
-              </button>
+            <div className="flex gap-2 items-center">
               <button 
                 onClick={() => setIsSettingsOpen(true)}
-                className="p-1.5 sm:p-2 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden border-2 border-[#e3e2e0] hover:border-[#3c40c6] transition-all flex items-center justify-center bg-[#faf8f5] shadow-xs relative group shrink-0"
+                title={`Google Account: ${user?.email || ''}`}
               >
-                <Settings size={16} className="sm:w-[18px] sm:h-[18px]" />
+                <img 
+                  src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120&h=120" 
+                  alt="Profile" 
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors" />
               </button>
             </div>
           </div>
           
           {/* Search Bar moved to Navbar */}
           <div className="relative group">
-            <div className="absolute inset-y-0 left-3 sm:left-4 flex items-center pointer-events-none text-white/20 group-focus-within:text-white/60 transition-colors">
+            <div className="absolute inset-y-0 left-3 sm:left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#3c40c6] transition-colors">
               <Search size={16} className="sm:w-[18px] sm:h-[18px]" />
             </div>
             <input 
@@ -1484,12 +1482,12 @@ export default function App() {
               placeholder="Search medications..."
               value={searchQuery || ''}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-2.5 sm:py-3 pl-10 sm:pl-12 pr-10 sm:pr-12 focus:outline-none focus:border-white/30 transition-all placeholder:text-white/20 text-xs sm:text-sm"
+              className="w-full bg-white border border-[#e3e2e0] text-[#1f1f1f] placeholder-slate-400 focus:outline-none focus:border-[#3c40c6] focus:ring-2 focus:ring-[#3c40c6]/10 transition-all rounded-2xl py-2.5 sm:py-3 pl-10 sm:pl-12 pr-10 sm:pr-12 text-xs sm:text-sm shadow-xs"
             />
             {searchQuery && (
               <button 
                 onClick={() => setSearchQuery('')}
-                className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-white/20 hover:text-white/60 transition-colors"
+                className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
                 title="Clear search"
               >
                 <X size={16} className="sm:w-[18px] sm:h-[18px]" />
@@ -1502,19 +1500,19 @@ export default function App() {
       <main className="max-w-2xl mx-auto pt-6 pb-32">
         {/* Stats / Info */}
         <div className="px-4 mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 shadow-lg ring-1 ring-white/5">
-            <p className="text-white/40 text-[7px] sm:text-[9px] uppercase tracking-widest font-bold mb-1">Total</p>
-            <p className="text-xl sm:text-2xl font-bold tracking-tight">{medicines.length}</p>
+          <div className="bg-white border border-[#e3e2e0] rounded-2xl p-3.5 shadow-sm">
+            <p className="text-slate-500 text-[10px] sm:text-[11px] uppercase tracking-wider font-extrabold mb-1">Total</p>
+            <p className="text-xl sm:text-2xl font-black text-[#1f1f1f] tracking-tight">{medicines.length}</p>
           </div>
-          <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 shadow-lg ring-1 ring-white/5">
-            <p className="text-white/40 text-[7px] sm:text-[9px] uppercase tracking-widest font-bold mb-1">Unique</p>
-            <p className="text-xl sm:text-2xl font-bold tracking-tight text-blue-400">
+          <div className="bg-white border border-[#e3e2e0] rounded-2xl p-3.5 shadow-sm">
+            <p className="text-slate-500 text-[10px] sm:text-[11px] uppercase tracking-wider font-extrabold mb-1">Unique</p>
+            <p className="text-xl sm:text-2xl font-black text-[#1a73e8] tracking-tight">
               {new Set(medicines.map(m => m.name.toLowerCase().trim())).size}
             </p>
           </div>
-          <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 shadow-lg ring-1 ring-white/5">
-            <p className="text-white/40 text-[7px] sm:text-[9px] uppercase tracking-widest font-bold mb-1">Expiring</p>
-            <p className="text-xl sm:text-2xl font-bold tracking-tight text-orange-400">
+          <div className="bg-white border border-[#e3e2e0] rounded-2xl p-3.5 shadow-sm">
+            <p className="text-slate-500 text-[10px] sm:text-[11px] uppercase tracking-wider font-extrabold mb-1">Expiring</p>
+            <p className="text-xl sm:text-2xl font-black text-[#f2a154] tracking-tight">
               {medicines.filter(m => {
                 const expiry = new Date(m.expirationDate);
                 const today = new Date();
@@ -1532,9 +1530,9 @@ export default function App() {
               }).length}
             </p>
           </div>
-          <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 rounded-2xl p-3 sm:p-4 shadow-lg ring-1 ring-white/5">
-            <p className="text-white/40 text-[7px] sm:text-[9px] uppercase tracking-widest font-bold mb-1">Taken</p>
-            <p className="text-xl sm:text-2xl font-bold tracking-tight text-emerald-400">
+          <div className="bg-white border border-[#e3e2e0] rounded-2xl p-3.5 shadow-sm">
+            <p className="text-slate-500 text-[10px] sm:text-[11px] uppercase tracking-wider font-extrabold mb-1">Taken</p>
+            <p className="text-xl sm:text-2xl font-black text-[#0f9d58] tracking-tight">
               {medicines.filter(m => m.taken).length}
             </p>
           </div>
@@ -1552,49 +1550,48 @@ export default function App() {
         <div className="px-4 mb-6 flex flex-wrap gap-2">
           <button 
             onClick={() => setFilter('all')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all ${filter === 'all' ? 'bg-white text-black' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'all' ? 'bg-[#3c40c6] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
           >
             All
           </button>
           <button 
             onClick={() => setFilter('expired')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all ${filter === 'expired' ? 'bg-red-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'expired' ? 'bg-[#ea4335] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
           >
             Expired
           </button>
           <button 
             onClick={() => setFilter('expiring_soon')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all ${filter === 'expiring_soon' ? 'bg-orange-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'expiring_soon' ? 'bg-[#f2a154] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
           >
             Soon
           </button>
           <button 
             onClick={() => setFilter('expiring_3_months')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all ${filter === 'expiring_3_months' ? 'bg-yellow-500' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'}`}
-            style={filter === 'expiring_3_months' ? { color: '#000000' } : {}}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'expiring_3_months' ? 'bg-[#ab47bc] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
           >
             {alertThreshold === 90 ? '< 3 Mo' : `< ${alertThreshold}d`}
           </button>
           <button 
             onClick={() => setFilter('expiring_6_months')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all ${filter === 'expiring_6_months' ? 'bg-emerald-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'expiring_6_months' ? 'bg-[#1a73e8] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
           >
             &lt; 6 Mo
           </button>
           <button 
             onClick={() => setFilter('taken')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all ${filter === 'taken' ? 'bg-blue-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'taken' ? 'bg-[#0f9d58] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
           >
             Taken
           </button>
-          <div className="w-px h-6 bg-white/10 mx-1 self-center shrink-0"></div>
+          <div className="w-px h-6 bg-[#e3e2e0] mx-1 self-center shrink-0"></div>
           <button 
             onClick={() => {
               const nextOrder = sortOrder === 'default' ? 'asc' : sortOrder === 'asc' ? 'desc' : 'default';
               setSortOrder(nextOrder);
               handleUpdateConfig({ sortOrder: nextOrder });
             }}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all ${sortOrder !== 'default' ? 'bg-indigo-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${sortOrder !== 'default' ? 'bg-[#3c40c6] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
           >
             {sortOrder === 'desc' ? 'Z-A' : 'A-Z'}
           </button>
@@ -1608,56 +1605,46 @@ export default function App() {
           onDeleteMultiple={handleDeleteMultiple}
           lowQuantityThreshold={lowQuantityThreshold}
           alertThreshold={alertThreshold}
+          onToggleLike={handleToggleLike}
         />
         <AdBanner slot="7890123456" />
       </main>
 
       {/* Floating Action Bar */}
       <div className="fixed bottom-6 left-0 right-0 z-40 px-6">
-        <div className="max-w-[320px] mx-auto bg-white/[0.01] backdrop-blur-3xl border border-white/10 rounded-full p-2 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/5">
+        <div className="max-w-[320px] mx-auto bg-white/95 backdrop-blur-md border border-[#e3e2e0] rounded-full p-2 flex items-center justify-between shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
           <button 
             onClick={handleAddManual}
-            className="flex-1 py-2 flex flex-col items-center gap-1 transition-all"
+            className="flex-1 py-2 flex flex-col items-center gap-1 transition-all hover:opacity-80"
             style={{ color: 'var(--accent-color)', opacity: 1 }}
           >
             <Plus size={20} />
             <span className="text-[9px] font-bold uppercase tracking-widest">Manual</span>
           </button>
           
-          <div className="w-px h-8 bg-white/10 mx-1"></div>
+          <div className="w-px h-8 bg-slate-200 mx-1"></div>
 
           <button 
             onClick={() => setIsChatOpen(true)}
-            className="flex-1 py-2 flex flex-col items-center gap-1 transition-all"
+            className="flex-1 py-2 flex flex-col items-center gap-1 transition-all hover:opacity-80"
             style={{ color: 'var(--accent-color)' }}
           >
             <Stethoscope size={20} />
             <span className="text-[9px] font-bold uppercase tracking-widest">Consult</span>
           </button>
 
-          <div className="w-px h-8 bg-white/10 mx-1"></div>
+          <div className="w-px h-8 bg-slate-200 mx-1"></div>
 
           <button 
             onClick={() => {
               triggerLightHaptic();
               setIsCameraOpen(true);
             }}
-            className="flex-none py-2 px-4 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 active:scale-95"
+            className="flex-none py-2 px-4 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 active:scale-95 hover:opacity-80"
             style={{ color: 'var(--accent-color)' }}
           >
             <Camera size={20} />
             <span className="text-[9px] font-bold uppercase tracking-widest">Scan</span>
-          </button>
-
-          <div className="w-px h-8 bg-white/10 mx-1"></div>
-
-          <button 
-            onClick={() => setIsGuideOpen(true)}
-            className="flex-1 py-2 flex flex-col items-center gap-1 transition-all"
-            style={{ color: 'var(--accent-color)', opacity: 1 }}
-          >
-            <Info size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-widest">Guide</span>
           </button>
         </div>
       </div>
@@ -1751,6 +1738,16 @@ export default function App() {
             rawKeyString={rawKeyString}
             captchaEnabled={captchaEnabled}
             onToggleCaptcha={handleToggleCaptcha}
+            // Integrations
+            onImportCSV={handleImport}
+            onExportCSV={exportToSheets}
+            onOpenMailbox={() => setIsMailboxOpen(true)}
+            onOpenHealthSync={() => setIsHealthSyncOpen(true)}
+            onOpenGoogleTasks={() => setIsGoogleTasksOpen(true)}
+            // Screenshot navigation matching
+            onResetToHome={() => { setFilter('all'); setSearchQuery(''); setIsLikedOnly(false); }}
+            onToggleLikedOnly={() => setIsLikedOnly(!isLikedOnly)}
+            isLikedOnly={isLikedOnly}
           />
         )}
 
@@ -1798,88 +1795,6 @@ export default function App() {
             />
           )}
         </AnimatePresence>
-
-        {isGuideOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
-          >
-            <div className="w-full max-w-md bg-[#1a1a1a] border border-white/10 rounded-[40px] p-8 overflow-y-auto max-h-[80vh]">
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-2xl font-bold tracking-tight">User Guide</h2>
-                <button onClick={() => setIsGuideOpen(false)} className="p-2 text-white/40 hover:text-white">
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="space-y-8">
-                <section>
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                    <Camera size={18} className="text-white/40" />
-                    AI Scanning
-                  </h3>
-                  <p className="text-white/50 text-sm leading-relaxed">
-                    Point your camera at any medicine label. Our AI will automatically extract the name, dosage, and expiration date. You can verify and edit the details before saving.
-                  </p>
-                </section>
-
-                <section>
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                    <Download size={18} className="text-white/40" />
-                    Backup & Restore
-                  </h3>
-                  <p className="text-white/50 text-sm leading-relaxed mb-4">
-                    Use the <strong>Export</strong> button to save your data as a CSV. You can <strong>Import</strong> it back later or on another device using the upload icon. This is perfect for migrating data from Google Sheets.
-                  </p>
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                    <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold mb-2">CSV Format</p>
-                    <p className="text-xs text-white/60">
-                      Ensure your CSV has headers: <strong>Name, Dosage, Quantity, Expiration Date, Usage Instructions</strong>.
-                    </p>
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                    <Download size={18} className="text-white/40" />
-                    Cloud Sync & Notifications
-                  </h3>
-                  <p className="text-white/50 text-sm leading-relaxed mb-4">
-                    Your data is now stored in the cloud. Even if you delete the app, your medicines are safe. Enable email notifications in settings to get alerts directly in your inbox.
-                  </p>
-                </section>
-
-                <section>
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                    <History size={18} className="text-white/40" />
-                    History Log & Multi-Select
-                  </h3>
-                  <p className="text-white/50 text-sm leading-relaxed mb-4">
-                    Tap the red clock icon when editing a medicine to view its complete history log. You can also select multiple medicines from the main list to delete them at once. Deleted items are kept in the <strong>Recently Deleted</strong> section in Settings for 15 days before permanent removal.
-                  </p>
-                </section>
-                <section>
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                    <ShieldAlert size={18} className="text-white/40" />
-                    Cookie Policy & Privacy
-                  </h3>
-                  <p className="text-white/50 text-sm leading-relaxed mb-4">
-                    We use cookies to enhance your experience and analyze app usage via Google Analytics. You can manage your cookie preferences at any time in the <strong>Settings</strong> menu under "Cookie Preferences". We do not sell your personal data.
-                  </p>
-                </section>
-              </div>
-
-              <button 
-                onClick={() => setIsGuideOpen(false)}
-                className="w-full mt-10 py-4 bg-white text-black rounded-full font-bold hover:bg-white/90 transition-all"
-              >
-                Got it
-              </button>
-            </div>
-          </motion.div>
-        )}
 
         {isInteractionModalOpen && interactionResult && (
           <motion.div 

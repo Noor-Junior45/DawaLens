@@ -3,5 +3,8 @@
   "description": "The ultimate AI-powered medicine tracker and medication scanner. Use your camera to identify pills, track prescriptions, and export health data to Google Sheets. Smart, secure, and easy medication management.",
   "requestFramePermissions": [
     "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }
