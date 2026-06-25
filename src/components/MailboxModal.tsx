@@ -244,9 +244,9 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-[#070707]/90 backdrop-blur-xl flex items-center justify-center p-0 md:p-6"
     >
-      <div className="w-full max-w-4xl h-full md:h-[85vh] bg-[#121212] border-0 md:border md:border-white/10 rounded-none md:rounded-[36px] overflow-hidden shadow-2xl flex flex-col">
+      <div className="w-full max-w-4xl h-full md:h-[85vh] bg-[#121212] border-0 rounded-none md:rounded-[36px] overflow-hidden shadow-2xl flex flex-col">
         {/* Header Section */}
-        <header className="p-4 sm:p-6 border-b border-white/5 bg-gradient-to-r from-white/[0.02] to-transparent flex justify-between items-center shrink-0 relative">
+        <header className="p-4 sm:p-6 bg-gradient-to-r from-white/[0.02] to-transparent flex justify-between items-center shrink-0 relative">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 text-white shrink-0">
               <Mail size={20} className="sm:size-[22px]" />
@@ -272,7 +272,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
         </header>
 
         {/* Action Panel: Dispatch Tests */}
-        <div className="px-4 sm:px-6 py-4 bg-white/[0.01] border-b border-white/5 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="px-4 sm:px-6 py-4 bg-white/[0.01] shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-white/40 flex items-center gap-1.5 shrink-0">
               <Play size={12} className="text-accent" /> Trigger Tester Alerts:
@@ -312,7 +312,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           
           {/* Left panel: List of Emails */}
-          <div className="w-full md:w-[40%] border-r border-white/5 overflow-y-auto flex flex-col h-1/2 md:h-full bg-black/20">
+          <div className="w-full md:w-[40%] overflow-y-auto flex flex-col h-1/2 md:h-full bg-black/20">
             {isLoading ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8">
                 <RefreshCw size={24} className="animate-spin text-white/40" />
@@ -376,7 +376,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
               <div className="p-6 space-y-6">
                 
                 {/* Header Information */}
-                <div className="bg-white/[0.02] p-6 border border-white/5 rounded-3xl space-y-4">
+                <div className="bg-white/[0.02] p-6 rounded-3xl space-y-4">
                   <div className="flex flex-wrap justify-between items-start gap-4">
                     <div>
                       <span className="text-[9px] font-black uppercase tracking-wider text-white/30">Target Recipient</span>
@@ -421,7 +421,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
                   <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 block ml-1">
                     📩 Rendered Template Body:
                   </span>
-                  <div className="bg-white border border-gray-200 rounded-[24px] overflow-hidden max-h-[500px]">
+                  <div className="bg-white rounded-[24px] overflow-hidden max-h-[500px]">
                     <iframe
                       title="Email Body Preview"
                       srcDoc={selectedEmail.message.html}

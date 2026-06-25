@@ -126,25 +126,6 @@ export function HealthSyncModal({ onClose, medicines, accentColor }: HealthSyncM
 
     try {
       // 1. Create or verify custom data sources representing DawaLens intake and hydration logs
-      // Hydration source
-      const hydrationSourceBody = {
-        dataStreamName: "DawaLensHydrationSource",
-        type: "raw",
-        dataType: {
-          name: "com.google.hydration",
-          field: [{ name: "volume", format: "floatPoint" }]
-        },
-        device: {
-          manufacturer: "DawaLens AI",
-          model: "WebEngine v1.0",
-          type: "scale",
-          uid: "dawalens_web_engine_client"
-        },
-        application: {
-          name: "DawaLens AI Companion"
-        }
-      };
-
       // Compliance history (Activity segments - medication log activity index 114 represent "In-active / log")
       const complianceSourceBody = {
         dataStreamName: "DawaLensComplianceSource",
@@ -183,58 +164,15 @@ export function HealthSyncModal({ onClose, medicines, accentColor }: HealthSyncM
         return await res.json();
       };
 
-      const hydrationDs = await createDataSource(hydrationSourceBody);
       const complianceDs = await createDataSource(complianceSourceBody);
 
-      const hydId = hydrationDs.dataStreamId || `raw:com.google.hydration:dawalens_web_engine_client:DawaLensHydrationSource`;
       const compId = complianceDs.dataStreamId || `raw:com.google.activity.segment:dawalens_compliance_watch:DawaLensComplianceSource`;
 
-      setSyncLogs(prev => [...prev, `[Fit] Successfully initialized Streams: "${hydId.substring(0, 30)}..."`]);
+      setSyncLogs(prev => [...prev, `[Fit] Successfully initialized Streams.`]);
 
       const now = Date.now();
       const nowNanos = now * 1000000;
       const oneHourAgoNanos = (now - 3600000) * 1000000;
-
-      // 2. Log recent hydration if tracked
-      const d = new Date();
-      const dateStr = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-      const waterCups = parseInt(localStorage.getItem(`hydration_${dateStr}`) || '0', 10);
-
-      if (waterCups > 0) {
-        // volume in liters (1 cup = ~0.237 liters)
-        const liters = waterCups * 0.236588;
-        setSyncLogs(prev => [...prev, `[Sync Hydration] Pushing ${waterCups} cups (${liters.toFixed(2)}L) to database...`]);
-
-        const hydDatasetBody = {
-          dataSourceId: hydId,
-          minStartTimeNs: oneHourAgoNanos,
-          maxEndTimeNs: nowNanos,
-          point: [{
-            startTimeNanos: oneHourAgoNanos,
-            endTimeNanos: nowNanos,
-            dataTypeName: "com.google.hydration",
-            value: [{ fpVal: liters }]
-          }]
-        };
-
-        // PUT dataset
-        const range = `${oneHourAgoNanos}-${nowNanos}`;
-        const syncRes = await fetch(`https://www.googleapis.com/fitness/v1/users/me/dataSources/${encodeURIComponent(hydId)}/datasets/${range}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`
-          },
-          body: JSON.stringify(hydDatasetBody)
-        });
-
-        if (syncRes.ok) {
-          setSyncLogs(prev => [...prev, `[Success] Hydration securely logged into Google Fit.`]);
-        } else {
-          const errText = await syncRes.text();
-          setSyncLogs(prev => [...prev, `[Warn] Hydration upload response: ${errText.substring(0, 100)}`]);
-        }
-      }
 
       // 3. Log active healthcare history taken logs as custom active segment sessions
       if (historyLogs.length > 0) {

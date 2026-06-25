@@ -169,7 +169,7 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
           return (
             <motion.div
               layout
-              key={`${med.id}-${index}`}
+              key={med.id}
               initial={{ opacity: 0, scale: 0.96, y: 15 }}
               animate={{ 
                 opacity: med.taken ? 0.5 : 1, 
@@ -208,16 +208,16 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
                   onEdit(med);
                 }
               }}
-              className={`w-full text-left group relative overflow-hidden border rounded-3xl p-5 transition-all ${
+              className={`w-full text-left group relative overflow-hidden border-2 rounded-3xl p-5 transition-all ${
                 isSelectionMode ? 'cursor-pointer' : ''
               } ${
                 isSelected ? 'bg-white border-[#3c40c6] shadow-[0_12px_40px_rgba(60,64,198,0.06)]' :
-                med.taken ? 'bg-[#faf8f5]/60 border-[#e3e2e0]/60 opacity-60' :
-                isExpired ? 'bg-white border-red-200 hover:border-red-400 hover:bg-rose-50/10 shadow-[0_12px_32px_rgba(239,68,68,0.03)]' :
-                isExpiringSoon ? 'bg-white border-orange-200 hover:border-orange-400 hover:bg-amber-50/10 shadow-[0_12px_32px_rgba(249,115,22,0.03)]' :
-                isExpiringAlert ? 'bg-white border-purple-200 hover:border-purple-400 hover:bg-purple-50/10 shadow-[0_12px_32px_rgba(168,85,247,0.03)]' :
-                isLowQuantity ? 'bg-white border-amber-200 hover:border-amber-400 hover:bg-amber-50/10 shadow-[0_12px_32px_rgba(245,158,11,0.03)]' :
-                'bg-white border-[#e3e2e0] hover:border-[#1a73e8]/40 hover:bg-[#faf8f5]/40 shadow-[0_12px_32px_rgba(0,0,0,0.04)]'
+                med.taken ? 'bg-[#faf8f5] border-slate-300 opacity-60' :
+                isExpired ? 'bg-white border-red-500 hover:border-red-600 hover:bg-red-50 shadow-sm' :
+                isExpiringSoon ? 'bg-white border-orange-500 hover:border-orange-600 hover:bg-orange-50 shadow-sm' :
+                isExpiringAlert ? 'bg-white border-purple-500 hover:border-purple-600 hover:bg-purple-50 shadow-sm' :
+                isLowQuantity ? 'bg-white border-amber-500 hover:border-amber-600 hover:bg-amber-50 shadow-sm' :
+                'bg-white border-blue-400 hover:border-blue-500 hover:bg-blue-50/30 shadow-sm'
               }`}
             >
               {med.imageUrl && (

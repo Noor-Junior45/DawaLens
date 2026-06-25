@@ -466,40 +466,16 @@ export default function App() {
 
   useEffect(() => {
     const applyThemeAndAccent = () => {
-      let isDark = false;
-      if (theme === 'dark') {
-        isDark = true;
-      } else if (theme === 'light') {
-        isDark = false;
-      } else {
-        // System preference
-        isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      }
-
-      if (isDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-
-      // Adjust accent color for light mode if it's white
+      document.documentElement.classList.remove('dark');
       let color = accentColor;
-      if (!isDark && color === '#ffffff') {
+      if (color === '#ffffff') {
         color = '#111827';
       }
       document.documentElement.style.setProperty('--accent-color', color);
     };
 
     applyThemeAndAccent();
-
-    // Listen for system theme changes if set to 'system'
-    if (theme === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const handleChange = () => applyThemeAndAccent();
-      mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery.removeEventListener('change', handleChange);
-    }
-  }, [theme, accentColor]);
+  }, [accentColor]);
 
   useEffect(() => {
     if (user) {
@@ -1462,7 +1438,7 @@ export default function App() {
                 title={`Google Account: ${user?.email || ''}`}
               >
                 <img 
-                  src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120&h=120" 
+                  src={user?.photoURL || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120&h=120"} 
                   alt="Profile" 
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                   referrerPolicy="no-referrer"
@@ -1566,24 +1542,6 @@ export default function App() {
           >
             Soon
           </button>
-          <button 
-            onClick={() => setFilter('expiring_3_months')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'expiring_3_months' ? 'bg-[#ab47bc] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
-          >
-            {alertThreshold === 90 ? '< 3 Mo' : `< ${alertThreshold}d`}
-          </button>
-          <button 
-            onClick={() => setFilter('expiring_6_months')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'expiring_6_months' ? 'bg-[#1a73e8] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
-          >
-            &lt; 6 Mo
-          </button>
-          <button 
-            onClick={() => setFilter('taken')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border transition-all ${filter === 'taken' ? 'bg-[#0f9d58] text-white border-transparent shadow-xs' : 'bg-white hover:bg-slate-50 border-[#e3e2e0] text-slate-600 hover:text-slate-800'}`}
-          >
-            Taken
-          </button>
           <div className="w-px h-6 bg-[#e3e2e0] mx-1 self-center shrink-0"></div>
           <button 
             onClick={() => {
@@ -1625,26 +1583,26 @@ export default function App() {
           <div className="w-px h-8 bg-slate-200 mx-1"></div>
 
           <button 
-            onClick={() => setIsChatOpen(true)}
+            onClick={() => {
+              triggerLightHaptic();
+              setIsCameraOpen(true);
+            }}
             className="flex-1 py-2 flex flex-col items-center gap-1 transition-all hover:opacity-80"
             style={{ color: 'var(--accent-color)' }}
           >
-            <Stethoscope size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-widest">Consult</span>
+            <Camera size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-widest">Scan</span>
           </button>
 
           <div className="w-px h-8 bg-slate-200 mx-1"></div>
 
           <button 
-            onClick={() => {
-              triggerLightHaptic();
-              setIsCameraOpen(true);
-            }}
+            onClick={() => setIsChatOpen(true)}
             className="flex-none py-2 px-4 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 active:scale-95 hover:opacity-80"
             style={{ color: 'var(--accent-color)' }}
           >
-            <Camera size={20} />
-            <span className="text-[9px] font-bold uppercase tracking-widest">Scan</span>
+            <Stethoscope size={20} />
+            <span className="text-[9px] font-bold uppercase tracking-widest">Consult</span>
           </button>
         </div>
       </div>
@@ -1724,8 +1682,7 @@ export default function App() {
                 handleUpdateConfig({ browserNotificationsEnabled: false });
               }
             }}
-            theme={theme}
-            setTheme={(val) => handleUpdateConfig({ theme: val })}
+            photoURL={user?.photoURL || undefined}
             userEmail={user.email || ''}
             onLogout={handleLogout}
             medicines={medicines}
@@ -1801,63 +1758,63 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md overflow-y-auto"
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm overflow-y-auto"
           >
-            <div className="w-full max-w-lg bg-[#1a1a1a] border border-white/10 rounded-[32px] p-8 shadow-2xl my-auto">
+            <div className="w-full max-w-lg bg-[#faf8f5] border border-[#e3e2e0] rounded-[32px] p-8 shadow-2xl my-auto">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-500/20 rounded-full flex items-center justify-center">
-                    <ShieldAlert className="text-indigo-400" size={20} />
+                  <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center">
+                    <ShieldAlert className="text-[#3c40c6]" size={20} />
                   </div>
-                  <h3 className="text-xl font-bold text-white tracking-tight">Safety Analysis</h3>
+                  <h3 className="text-xl font-bold text-[#1f1f1f] tracking-tight">Safety Analysis</h3>
                 </div>
                 <button 
                   onClick={() => setIsInteractionModalOpen(false)}
-                  className="p-2 text-white/40 hover:text-white transition-colors"
+                  className="p-2 text-slate-400 hover:text-slate-800 transition-colors"
                 >
                   <X size={24} />
                 </button>
               </div>
 
               <div className="space-y-6">
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                  <p className="text-white/60 text-sm leading-relaxed">
+                <div className="bg-white border border-[#e3e2e0] rounded-2xl p-4">
+                  <p className="text-slate-600 text-sm leading-relaxed">
                     Our AI has analyzed your current medications for potential interactions. 
-                    <span className="block mt-2 text-[10px] uppercase tracking-widest font-bold text-white/30">Disclaimer: This is for informational purposes only. Always consult a doctor.</span>
+                    <span className="block mt-2 text-[10px] uppercase tracking-widest font-bold text-slate-400">Disclaimer: This is for informational purposes only. Always consult a doctor.</span>
                   </p>
                 </div>
 
                 {interactionResult.interactions.length > 0 ? (
                   <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
                     {interactionResult.interactions.map((interaction, idx) => (
-                      <div key={`interaction-${idx}`} className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                      <div key={`interaction-${idx}`} className="bg-white border border-[#e3e2e0]/60 rounded-2xl p-4">
                         <div className="flex justify-between items-start mb-2">
-                          <h4 className="text-white font-semibold text-sm">{interaction.medications.join(' + ')}</h4>
+                          <h4 className="text-[#1f1f1f] font-semibold text-sm">{interaction.medications.join(' + ')}</h4>
                           <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
-                            interaction.severity === 'high' ? 'bg-red-500/20 text-red-400' :
-                            interaction.severity === 'moderate' ? 'bg-orange-500/20 text-orange-400' :
-                            'bg-blue-500/20 text-blue-400'
+                            interaction.severity === 'high' ? 'bg-red-50 text-red-700' :
+                            interaction.severity === 'moderate' ? 'bg-orange-50 text-orange-700' :
+                            'bg-blue-50 text-blue-700'
                           }`}>
                             {interaction.severity}
                           </span>
                         </div>
-                        <p className="text-white/50 text-xs leading-relaxed">{interaction.description}</p>
+                        <p className="text-slate-500 text-xs leading-relaxed">{interaction.description}</p>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="py-10 text-center">
-                    <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <CheckCircle2 className="text-emerald-500" size={32} />
+                    <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle2 className="text-emerald-600" size={32} />
                     </div>
-                    <p className="text-white font-medium">No significant interactions found</p>
-                    <p className="text-white/40 text-xs mt-1">Based on your current medication list.</p>
+                    <p className="text-[#1f1f1f] font-medium">No significant interactions found</p>
+                    <p className="text-slate-400 text-xs mt-1">Based on your current medication list.</p>
                   </div>
                 )}
 
-                <div className="pt-2">
-                  <h4 className="text-[10px] uppercase tracking-widest font-bold text-white/30 mb-3">General Advice</h4>
-                  <p className="text-white/50 text-xs leading-relaxed italic">
+                <div className="pt-2 border-t border-[#e3e2e0]">
+                  <h4 className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-3">General Advice</h4>
+                  <p className="text-slate-500 text-xs leading-relaxed italic">
                     {interactionResult.generalAdvice}
                   </p>
                 </div>
@@ -1865,7 +1822,7 @@ export default function App() {
 
               <button 
                 onClick={() => setIsInteractionModalOpen(false)}
-                className="w-full mt-8 py-4 bg-white text-black rounded-full font-bold hover:bg-white/90 transition-all"
+                className="w-full mt-8 py-4 bg-[#3c40c6] text-white rounded-full font-bold hover:bg-[#3c40c6]/95 transition-all shadow-sm"
               >
                 Close Analysis
               </button>
@@ -1878,17 +1835,17 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
           >
-            <div className="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-[32px] p-6 text-center">
-              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Info className="text-white" size={32} />
+            <div className="w-full max-w-sm bg-[#faf8f5] border border-[#e3e2e0] rounded-[32px] p-6 text-center shadow-2xl">
+              <div className="w-16 h-16 bg-[#3c40c6]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Info className="text-[#3c40c6]" size={32} />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Notice</h3>
-              <p className="text-white/60 text-sm mb-6">{alertMessage}</p>
+              <h3 className="text-xl font-bold text-[#1f1f1f] mb-2">Notice</h3>
+              <p className="text-slate-600 text-sm mb-6">{alertMessage}</p>
               <button 
                 onClick={() => setAlertMessage(null)}
-                className="w-full py-3 bg-white text-black rounded-xl font-bold hover:bg-white/90 transition-all"
+                className="w-full py-3 bg-[#3c40c6] text-white rounded-xl font-bold hover:bg-[#3c40c6]/95 transition-all shadow-sm"
               >
                 OK
               </button>

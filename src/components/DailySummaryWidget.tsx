@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  CheckCircle2, Droplet, Sparkles, Clock, Plus, Minus, AlertCircle, ShoppingBag, CheckSquare, Square
+  CheckCircle2, Sparkles, Clock, Plus, AlertCircle, ShoppingBag, CheckSquare, Square
 } from 'lucide-react';
 import { Medicine } from '../types';
 import { triggerLightHaptic, triggerSuccessHaptic } from '../utils/haptics';
@@ -19,31 +19,6 @@ export function DailySummaryWidget({
   lowQuantityThreshold, 
   alertThreshold 
 }: DailySummaryWidgetProps) {
-  // Safe Date key for hydration tracking
-  const [todayKey, setTodayKey] = useState('');
-  const [waterCups, setWaterCups] = useState(0);
-
-  // Set local-storage-bound water cups based on date
-  useEffect(() => {
-    const d = new Date();
-    const dateStr = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-    setTodayKey(dateStr);
-    
-    const stored = localStorage.getItem(`hydration_${dateStr}`);
-    if (stored) {
-      setWaterCups(parseInt(stored, 10) || 0);
-    }
-  }, []);
-
-  const changeWater = (amount: number) => {
-    triggerLightHaptic();
-    const next = Math.max(0, Math.min(12, waterCups + amount));
-    setWaterCups(next);
-    if (todayKey) {
-      localStorage.setItem(`hydration_${todayKey}`, next.toString());
-    }
-  };
-
   // Filter out deleted medicines
   const activeMeds = medicines.filter(m => !m.isDeleted);
   const totalMeds = activeMeds.length;
@@ -184,63 +159,9 @@ export function DailySummaryWidget({
           </div>
         </motion.div>
 
-        {/* Hydration Tracker Companion & Quick Meds Checklist Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
-          
-          {/* Tracker 1: Interactive Water Widget */}
-          <div className="bg-[#faf8f5] border border-[#e3e2e0] rounded-2xl p-3.5 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="p-1.5 bg-blue-100 rounded-lg text-blue-600 shrink-0">
-                    <Droplet size={14} className="animate-pulse" />
-                  </span>
-                  <div>
-                    <h3 className="text-xs font-bold text-[#1f1f1f]">Hydration Companion</h3>
-                    <p className="text-[9px] text-[#5f6368]">Take meds with plenty of water</p>
-                  </div>
-                </div>
-                <span className="text-xs font-mono font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
-                  {waterCups}/8 Cups
-                </span>
-              </div>
-
-              {/* Graphical cups indicator */}
-              <div className="flex gap-1.5 my-3">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div 
-                    key={i} 
-                    className={`flex-1 h-5 rounded-md border transition-all ${
-                      i < waterCups 
-                        ? 'bg-blue-500 border-blue-500 shadow-xs' 
-                        : 'border-[#e3e2e0] bg-white'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => changeWater(-1)}
-                disabled={waterCups <= 0}
-                className="flex-1 py-1 px-3 border border-[#e3e2e0] hover:border-slate-300 hover:bg-slate-50 active:scale-95 disabled:opacity-40 transition-all rounded-xl text-xs text-slate-700 font-semibold flex items-center justify-center gap-1 min-h-[34px]"
-              >
-                <Minus size={12} />
-                <span>Reduce</span>
-              </button>
-              <button
-                onClick={() => changeWater(1)}
-                disabled={waterCups >= 12}
-                className="flex-1 py-1 px-3 bg-blue-50 hover:bg-blue-100/80 hover:border-blue-200 border border-blue-100 active:scale-95 disabled:opacity-40 transition-all rounded-xl text-xs text-blue-700 font-bold flex items-center justify-center gap-1 min-h-[34px]"
-              >
-                <Plus size={12} />
-                <span>Log Cup</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Tracker 2: Miniature Checklist for Active Meds */}
+        {/* Quick Meds Checklist Grid */}
+        <div className="grid grid-cols-1 gap-3.5 pt-1">
+          {/* Tracker: Miniature Checklist for Active Meds */}
           <div className="bg-[#faf8f5] border border-[#e3e2e0] rounded-2xl p-3.5 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex justify-between items-center mb-1">
@@ -254,9 +175,9 @@ export function DailySummaryWidget({
                 </div>
               ) : (
                 <div className="max-h-[84px] overflow-y-auto space-y-1.5 pr-1 text-left custom-scrollbar">
-                  {activeMeds.map((med, index) => (
+                  {activeMeds.map((med) => (
                     <div 
-                      key={`chk-${med.id}-${index}`}
+                      key={`chk-${med.id}`}
                       onClick={() => onToggleTaken(med)}
                       className="group/item flex items-center justify-between p-1.5 hover:bg-white active:scale-[0.98] border border-[#e3e2e0]/40 hover:border-[#e3e2e0] bg-white/50 rounded-xl cursor-pointer transition-all"
                     >
