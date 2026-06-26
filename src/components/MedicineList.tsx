@@ -85,7 +85,8 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
 
   const checkIsExpiredOrEmpty = (med: Medicine) => {
     const isEmpty = med.quantity !== undefined && med.quantity <= 0;
-    if (isEmpty) return true;
+    const isTaken = med.taken === true;
+    if (isEmpty || isTaken) return true;
 
     if (!med.expirationDate) return false;
 
@@ -381,7 +382,7 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
         <div className="flex items-center gap-2 mt-6 mb-2.5 px-2 select-none">
           <span className="w-1.5 h-1.5 rounded-full bg-[#ea4335]" />
           <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-            Expired or Empty Stock ({expiredOrEmptyMedicines.length})
+            Expired, Empty, or Finished Stock ({expiredOrEmptyMedicines.length})
           </span>
         </div>
       )}
