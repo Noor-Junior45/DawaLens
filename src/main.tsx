@@ -11,7 +11,7 @@ if ('serviceWorker' in navigator) {
         console.log('PWA Service Worker registered successfully:', reg.scope);
       })
       .catch((err) => {
-        console.error('PWA Service Worker registration failed:', err);
+        console.warn('PWA Service Worker registration warning (expected in sandboxed frames):', err);
       });
   });
 }

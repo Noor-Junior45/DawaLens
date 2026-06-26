@@ -156,7 +156,8 @@ export default function App() {
       const todayStr = today.toISOString().split('T')[0];
 
       // 1. Browser Notification Alert
-      if (browserNotificationsEnabled && Notification.permission === 'granted') {
+      const hasNotification = typeof window !== 'undefined' && 'Notification' in window && typeof Notification !== 'undefined';
+      if (browserNotificationsEnabled && hasNotification && Notification.permission === 'granted') {
         const expiringMeds = medicines.filter(m => {
           if (m.isDeleted) return false;
           const [year, month, day] = m.expirationDate.split('-').map(Number);
@@ -326,8 +327,9 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
+      const hasNotification = typeof window !== 'undefined' && 'Notification' in window && typeof Notification !== 'undefined';
       // Request notification permission
-      if ('Notification' in window && Notification.permission === 'default') {
+      if (hasNotification && Notification.permission === 'default') {
         Notification.requestPermission();
       }
 
@@ -347,8 +349,8 @@ export default function App() {
           const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
           
           if (diffDays >= 0 && diffDays <= 7) {
-            if (Notification.permission === 'granted') {
-              new Notification('Medicine Expiring Soon', {
+            if (hasNotification && Notification.permission === 'granted') {
+              new window.Notification('Medicine Expiring Soon', {
                 body: `${med.name} expires in ${diffDays} days.`,
                 icon: '/favicon.ico'
               });
