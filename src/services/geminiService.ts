@@ -2,31 +2,18 @@ import { MedicineForm, ChatMessage } from "../types";
 import { GoogleGenAI, Type } from "@google/genai";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY || '' });
 
 export const isProviderKeyMissing = (provider: 'gemini' | 'deepseek') => {
   if (provider === 'gemini') return !GEMINI_API_KEY;
-  if (provider === 'deepseek') return !DEEPSEEK_API_KEY;
   return false;
 };
 
 // Helper to provide descriptive errors for better diagnostics in India/Global regions
 const getDetailedError = (error: any, provider: 'gemini' | 'deepseek' = 'gemini') => {
   if (provider === 'gemini' && !GEMINI_API_KEY) return "Gemini API Key is missing. Please go to 'Settings' (gear icon) -> 'Secrets' in the AI Studio menu to add your GEMINI_API_KEY.";
-  if (provider === 'deepseek' && !DEEPSEEK_API_KEY) return "DeepSeek API Key is missing. Please go to 'Settings' (gear icon) -> 'Secrets' in the AI Studio menu to add your DEEPSEEK_API_KEY.";
   
   const msg = error.message || String(error);
-  
-  // Specific DeepSeek error handling
-  if (provider === 'deepseek') {
-    if (msg.toLowerCase().includes('insufficient balance')) {
-      return "DeepSeek account has no balance. Please top up your credits at platform.deepseek.com.";
-    }
-    if (msg.toLowerCase().includes('invalid') || msg.includes('401')) {
-      return "DeepSeek API Key is invalid or incorrect. Please check your key at platform.deepseek.com and update it in 'Settings' -> 'Secrets'.";
-    }
-  }
 
   // Specific Gemini error handling
   if (provider === 'gemini') {
@@ -205,46 +192,7 @@ export async function checkDrugInteractions(medicines: { name: string; dosage: s
 }
 
 export async function chatWithAI(messages: ChatMessage[], provider: 'gemini' | 'deepseek' = 'gemini'): Promise<string> {
-  if (provider === 'deepseek') {
-    return chatWithDeepSeek(messages);
-  }
   return chatWithGemini(messages);
-}
-
-export async function chatWithDeepSeek(messages: ChatMessage[]): Promise<string> {
-  try {
-    if (!DEEPSEEK_API_KEY) throw new Error("DeepSeek API Key is missing");
-
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [
-          { role: "system", content: SYSTEM_INSTRUCTION },
-          ...messages.map(m => ({ 
-            role: m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user', 
-            content: m.content 
-          }))
-        ],
-        stream: false
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content || "I'm sorry, DeepSeek returned an empty response.";
-  } catch (error) {
-    console.error('DeepSeek Chat failed:', error);
-    return `DeepSeek Connection Issue: ${getDetailedError(error, 'deepseek')}`;
-  }
 }
 
 export async function chatWithGemini(messages: ChatMessage[]): Promise<string> {

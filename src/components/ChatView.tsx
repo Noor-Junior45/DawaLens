@@ -3,7 +3,8 @@ import {
   X, Send, Bot, User, Sparkles, Loader2, Plus, 
   MessageSquare, ChevronLeft, Calendar, Clock, 
   History, Search, Trash2, ShieldCheck, Stethoscope,
-  AlertCircle, Pill, Info, Mail, ArrowLeft, Check, CheckCheck
+  AlertCircle, Pill, Info, Mail, ArrowLeft, Check, CheckCheck,
+  Camera, Mic, Languages
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -15,6 +16,7 @@ import { db } from '../firebase';
 import { Medicine, ChatMessage, ChatSession, AIProvider } from '../types';
 import { chatWithAI, isProviderKeyMissing } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
+import { DoctorLogo } from './DoctorLogo';
 
 interface ChatViewProps {
   onClose: () => void;
@@ -24,10 +26,10 @@ interface ChatViewProps {
 }
 
 const SUGGESTED_PROMPTS = [
-  { icon: <ShieldCheck size={16} />, label: "Check drug interactions", prompt: "Please check my medicine list for any potential dangerous interactions." },
-  { icon: <Info size={16} />, label: "Explain side effects", prompt: "Explain the common side effects of the medicines I'm currently taking." },
-  { icon: <Clock size={16} />, label: "Dosing advice", prompt: "Provide general advice on how to correctly space my doses throughout the day." },
-  { icon: <AlertCircle size={16} />, label: "Missed dose help", prompt: "What is the general protocol if I miss a dose of my medication?" }
+  { icon: <span className="text-[14px]">🔍</span>, label: "Check drug interactions 🔍", prompt: "Can you analyze my active medicines to see if there are any dangerous drug-to-drug interactions I should be aware of?" },
+  { icon: <span className="text-[14px]">⚠️</span>, label: "Explain side effects ⚠️", prompt: "What are the key side effects of the medicines currently in my inventory, and what warnings should I note?" },
+  { icon: <span className="text-[14px]">📅</span>, label: "Daily schedule help 📅", prompt: "Help me organize a safe daily consumption schedule for all the medications in my list." },
+  { icon: <span className="text-[14px]">⏳</span>, label: "Show expiring medicines ⏳", prompt: "Identify which of my medicines are expiring soon and advise on safe disposal practices." }
 ];
 
 const MAIN_SESSION_ID = 'global_medical_consultation';
@@ -38,8 +40,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
   const [isLoading, setIsLoading] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [disclaimerTimeLeft, setDisclaimerTimeLeft] = useState(30);
-  const [activeProvider, setActiveProvider] = useState<AIProvider>('gemini');
+  const [activeProvider] = useState<AIProvider>('gemini');
+  const [isOnline, setIsOnline] = useState(true);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+  useEffect(() => {
+    setIsOnline(!isProviderKeyMissing('gemini'));
+  }, []);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,31 +57,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
-    const lastShow = localStorage.getItem('last_medical_disclaimer_date');
-    const today = new Date().toDateString();
-    
-    if (lastShow !== today) {
-      setShowDisclaimer(true);
-      localStorage.setItem('last_medical_disclaimer_date', today);
-    }
-  }, []);
-
-  useEffect(() => {
-    let timer: any;
-    if (showDisclaimer && disclaimerTimeLeft > 0) {
-      timer = setInterval(() => {
-        setDisclaimerTimeLeft(prev => {
-          if (prev <= 1) {
-            setShowDisclaimer(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [showDisclaimer, disclaimerTimeLeft]);
+  // Removed auto-disclaimer popup for clean layout as requested
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -163,6 +146,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
       const promptHistory = historyContext.slice(0, -1).concat(lastMsgWithContext);
 
       const aiResponse = await chatWithAI(promptHistory, activeProvider);
+      setIsOnline(true);
 
       const aiMsgId = crypto.randomUUID();
       const aiMsg: ChatMessage = {
@@ -177,6 +161,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
       await updateDoc(sessionRef, { lastMessageAt: Date.now() });
     } catch (error) {
       console.error("Chat Error:", error);
+      setIsOnline(false);
     } finally {
       setIsLoading(false);
     }
@@ -232,293 +217,300 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
     return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
+  const lastAssistantMessage = useMemo(() => {
+    const assistants = messages.filter(m => m.role === 'assistant');
+    return assistants[assistants.length - 1];
+  }, [messages]);
+
+  const handleSpeakText = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const cleanText = text.replace(/[*#_`~]/g, '');
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const handleCopyText = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const formatMessageDateString = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
+  };
+
+  const [showSuggestions, setShowSuggestions] = useState(true);
+
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] bg-[#0b0b0b] flex flex-col overflow-hidden"
-    >
-      {/* Daily Disclaimer Modal */}
-      <AnimatePresence>
-        {showDisclaimer && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-6"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              className="w-full max-w-lg bg-[#1a1a1a] border border-white/10 rounded-[40px] p-8 md:p-12 shadow-2xl relative overflow-hidden"
-            >
-              {/* Progress Bar Background */}
-              <div className="absolute top-0 left-0 w-full h-1 bg-white/5">
-                <motion.div 
-                  initial={{ width: '100%' }}
-                  animate={{ width: '0%' }}
-                  transition={{ duration: 30, ease: 'linear' }}
-                  className="h-full bg-accent"
-                />
-              </div>
+    <>
+      {/* Dimmed backdrop to focus on the chat pop up and allow click-outside to close */}
+      <div 
+        onClick={onClose} 
+        className="fixed inset-0 bg-black/35 backdrop-blur-[2px] z-[99] cursor-default transition-all" 
+      />
 
-              <div className="flex flex-col items-center text-center space-y-6">
-                <div className="w-20 h-20 rounded-3xl bg-red-500/10 flex items-center justify-center text-red-500 mb-2">
-                  <ShieldCheck size={40} />
-                </div>
-                
-                <div className="space-y-2">
-                  <h3 className="text-2xl font-black text-white tracking-tight uppercase">Medical Disclaimer</h3>
-                  <p className="text-sm text-white/40 font-bold uppercase tracking-widest">Important Safety Notice</p>
-                </div>
-
-                <div className="bg-white/5 rounded-3xl p-6 text-sm text-white/70 leading-relaxed text-left border border-white/5">
-                  <p className="mb-4">
-                    The information provided by DawaLens AI is for <span className="text-white font-bold">informational and educational purposes only</span>. It is not a substitute for professional medical advice, diagnosis, or treatment.
-                  </p>
-                  <ul className="space-y-2 list-disc pl-4 text-white/50">
-                    <li>Always follow your physician's specific instructions.</li>
-                    <li>In case of a medical emergency, contact local emergency services immediately.</li>
-                    <li>Do not ignore or delay seeking professional advice due to information from this app.</li>
-                  </ul>
-                </div>
-
-                <div className="w-full flex flex-col gap-4">
-                  <button
-                    onClick={() => setShowDisclaimer(false)}
-                    className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase tracking-widest hover:bg-white/90 transition-all active:scale-95"
-                  >
-                    I Understand & Consent
-                  </button>
-                  <p className="text-[10px] text-white/20 font-bold uppercase tracking-[0.2em]">
-                    Dismissing automatically in {disclaimerTimeLeft} seconds
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main Bar / Header */}
-      <header className="flex items-center justify-between px-4 py-4 md:py-6 bg-[#121b22] border-b border-white/5 shrink-0 safe-top">
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="p-2 text-white/60 hover:text-white transition-colors">
-            <ArrowLeft size={24} />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-10 md:w-12 h-10 md:h-12 rounded-full bg-accent/20 flex items-center justify-center text-accent ring-2 ring-accent/20">
-                <Bot size={24} className="md:size-28" />
-              </div>
-              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#121b22] rounded-full" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-white text-sm md:text-base tracking-tight">DawaLens AI</span>
-              <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Medical Assistant</span>
-            </div>
-          </div>
+      <motion.div 
+        initial={isMobile ? { y: '100%' } : { opacity: 0, y: 40, scale: 0.98 }}
+        animate={isMobile ? { y: 0 } : { opacity: 1, y: 0, scale: 1 }}
+        exit={isMobile ? { y: '100%' } : { opacity: 0, y: 40, scale: 0.98 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+        className="fixed z-[100] flex flex-col overflow-hidden font-sans bg-[#fdfbf7] border border-slate-200/80 shadow-[0_24px_64px_rgba(0,0,0,0.18)]
+          top-[14vh] bottom-0 left-0 right-0 rounded-t-[32px] 
+          md:top-auto md:bottom-6 md:right-6 md:left-auto md:w-[460px] md:h-[680px] md:max-h-[82vh] md:rounded-[30px]"
+      >
+        {/* Drag handle for mobile to represent bottom sheet */}
+        <div className="md:hidden flex justify-center py-2 shrink-0 bg-[#3c40c6]">
+          <div className="w-12 h-1.5 rounded-full bg-white/30" />
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* AI Provider Toggle */}
-          <div className="hidden sm:flex bg-black/40 p-1 rounded-2xl border border-white/5 scale-90">
-            <button 
-              onClick={() => setActiveProvider('gemini')}
-              className={`py-1.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all gap-2 flex items-center ${
-                activeProvider === 'gemini' ? 'bg-accent text-black' : 'text-white/40 hover:text-white'
-              }`}
-            >
-              Gemini
-              {isProviderKeyMissing('gemini') && <AlertCircle size={12} className="text-red-500" />}
+        {/* Main Bar / Header */}
+        <header className="flex items-center justify-between px-4 py-3 bg-[#3c40c6] shrink-0 text-white relative z-30 shadow-xs">
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="p-1.5 text-white/90 hover:text-white transition-colors hover:bg-white/10 rounded-full" title="Back">
+              <ChevronLeft size={24} />
             </button>
-            <button 
-              onClick={() => setActiveProvider('deepseek')}
-              className={`py-1.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all gap-2 flex items-center ${
-                activeProvider === 'deepseek' ? 'bg-accent text-black' : 'text-white/40 hover:text-white'
-              }`}
-            >
-              DeepSeek
-              {isProviderKeyMissing('deepseek') && <AlertCircle size={12} className="text-red-500" />}
-            </button>
+            
+            <div className="flex items-center gap-3">
+              {/* Keep only that person[svg] */}
+              <div className="relative shrink-0 flex items-center justify-center">
+                <DoctorLogo className="w-10 h-10 text-white" />
+                <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-[#3c40c6] rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+              </div>
+              
+              <div className="flex flex-col">
+                <span className="font-extrabold text-white text-base tracking-tight leading-tight">AI Pharmacist</span>
+                <span className="text-[9px] text-[#e0e1f9] font-black uppercase tracking-widest flex items-center gap-1 mt-0.5">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-[#34d399]' : 'bg-[#ef4444]'}`} />
+                  {isOnline ? 'ONLINE' : 'OFFLINE'}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Red delete button with circular glassmorphism background */}
             <button
               onClick={handleClearChat}
-              className="p-2.5 bg-white/5 rounded-xl text-white/40 hover:text-red-400 hover:bg-white/10 transition-all"
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/15 backdrop-blur-md text-red-100 hover:bg-red-500/30 hover:text-white active:scale-95 rounded-full transition-all border border-red-500/20 shadow-xs"
               title="Clear Entire Chat"
             >
-              <Trash2 size={20} />
+              <Trash2 size={18} className="stroke-[2.5]" />
             </button>
+            {/* Black cross button with circular apple-style glassmorphism background */}
             <button 
               onClick={onClose}
-              className="p-2.5 bg-white/5 rounded-xl text-white/40 hover:text-white hover:bg-white/10 transition-all"
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-black/10 backdrop-blur-md text-white hover:bg-black/20 active:scale-95 rounded-full transition-all border border-white/10 shadow-xs"
+              title="Close"
             >
-              <X size={20} />
+              <X size={18} className="stroke-[2.5]" />
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="flex-1 flex flex-col relative bg-[#0b141a] overflow-hidden">
-        {/* Aesthetic Background Pattern */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none select-none overflow-hidden">
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-accent blur-[150px] rounded-full" />
-          <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-emerald-500 blur-[150px] rounded-full" />
-          <div className="grid grid-cols-12 gap-px h-full">
-            {Array.from({ length: 144 }).map((_, i) => (
-              <div key={i} className="border border-white/[0.05]" />
-            ))}
-          </div>
-        </div>
-
-        {/* Messages Container */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-hide relative z-10 w-full max-w-4xl mx-auto">
-          {messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
-              <Bot size={60} strokeWidth={1} />
-              <p className="mt-4 text-sm font-medium">Starting conversation...</p>
-            </div>
-          )}
-
-          <div className="space-y-6">
-            {messages.map((msg, idx) => {
-              const showDate = idx === 0 || formatMessageDate(msg.timestamp) !== formatMessageDate(messages[idx - 1].timestamp);
-              
-              return (
-                <React.Fragment key={`chat-msg-${msg.id || ''}-${idx}`}>
-                  {showDate && (
-                    <div className="flex justify-center my-10">
-                      <span className="bg-[#182229] text-white/50 text-[10px] font-black px-4 py-2 rounded-xl shadow-sm uppercase tracking-[0.2em] transition-all">
-                        {formatMessageDate(msg.timestamp)}
-                      </span>
-                    </div>
-                  )}
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    className={`flex items-end gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-                  >
-                    {/* Avatar Integration */}
-                    <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center overflow-hidden mb-2 ${
-                      msg.role === 'user' ? 'bg-white/10' : 'bg-accent/20 text-accent'
-                    }`}>
-                      {msg.role === 'user' ? (
-                        userPhoto ? <img src={userPhoto} alt="" className="w-full h-full object-cover" /> : <User size={16} />
-                      ) : (
-                        <Bot size={18} />
-                      )}
-                    </div>
-
-                    <div className={`relative max-w-[85%] md:max-w-[75%] px-4 pt-3 pb-2 shadow-lg flex flex-col ${
-                      msg.role === 'user' 
-                        ? 'bg-[#005c4b] text-white rounded-[18px] rounded-br-[4px]' 
-                        : 'bg-[#202c33] text-white rounded-[18px] rounded-bl-[4px]'
-                    }`}>
-                      {/* Provider Badge for AI */}
-                      {msg.role === 'assistant' && (
-                        <div className="flex items-center gap-2 mb-2 px-1 opacity-70">
-                          <Bot size={12} className="text-accent" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-accent">
-                            {msg.provider?.toUpperCase() || activeProvider.toUpperCase()}
-                          </span>
-                        </div>
-                      )}
-                      
-                      <div className="prose prose-sm prose-invert max-w-none text-[15px] leading-relaxed break-words">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      </div>
-                      
-                      <div className="flex items-center self-end gap-1.5 mt-2 ml-10">
-                        <span className="text-[10px] text-white/40 font-bold tracking-tighter">
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        {msg.role === 'user' && (
-                          <CheckCheck size={14} className="text-emerald-400 opacity-80" />
-                        )}
-                      </div>
-
-                      {/* Aesthetic Tails */}
-                      {msg.role === 'user' && (
-                        <svg className="absolute -bottom-[2px] -right-[10px]" width="15" height="15" viewBox="0 0 15 15">
-                          <path d="M0 15 C 6 15 10 15 15 15 L 15 0 C 12 4 8 10 0 15 Z" fill="#005c4b" />
-                        </svg>
-                      )}
-                      
-                      {msg.role === 'assistant' && (
-                        <svg className="absolute -bottom-[2px] -left-[10px]" width="15" height="15" viewBox="0 0 15 15">
-                          <path d="M15 15 C 9 15 5 15 0 15 L 0 0 C 3 4 7 10 15 15 Z" fill="#202c33" />
-                        </svg>
-                      )}
-                    </div>
-                  </motion.div>
-                </React.Fragment>
-              );
-            })}
-            {isLoading && (
-              <div className="flex justify-start items-end gap-3">
-                <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent mb-2">
-                  <Bot size={18} />
+        {/* Main Messages area with warm dot-grid background */}
+        <main 
+          className="flex-1 flex flex-col relative overflow-hidden"
+          style={{
+            backgroundColor: '#fbf9f4',
+            backgroundImage: 'radial-gradient(#e4dfd5 1.1px, transparent 1.1px)',
+            backgroundSize: '24px 24px'
+          }}
+        >
+          {/* Messages Container */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5 scrollbar-hide relative z-10 w-full max-w-4xl mx-auto custom-scrollbar">
+            {messages.length === 0 && (
+              <div className="h-full flex flex-col items-center justify-center text-center opacity-70 py-20">
+                <div className="w-16 h-16 rounded-full bg-[#3c40c6]/10 flex items-center justify-center text-[#3c40c6] mb-3 border border-[#3c40c6]/20">
+                  <DoctorLogo className="w-12 h-12 text-[#3c40c6]" />
                 </div>
-                <div className="bg-[#202c33] px-5 py-4 rounded-[18px] rounded-bl-[4px] shadow-sm">
-                  <div className="flex gap-2">
-                    <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2 }} className="w-2.5 h-2.5 bg-accent/60 rounded-full" />
-                    <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.2 }} className="w-2.5 h-2.5 bg-accent/60 rounded-full" />
-                    <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.4 }} className="w-2.5 h-2.5 bg-accent/60 rounded-full" />
-                  </div>
-                </div>
+                <p className="text-sm font-bold text-slate-700">How can I help you today?</p>
+                <p className="text-xs text-slate-500 mt-1 max-w-[260px] mx-auto">Ask me anything about interactions, dosages, or side effects of your medicines.</p>
               </div>
             )}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
 
-        {/* Input Bar & Persistent Recommendations */}
-        <div className="p-4 md:p-6 bg-[#121b22] border-t border-white/5 shrink-0 safe-bottom z-20">
-          <div className="max-w-4xl mx-auto space-y-4">
-            {/* Quick Actions Scroll bar */}
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide no-scrollbar">
-              {SUGGESTED_PROMPTS.map((item, idx) => (
+            <div className="space-y-5">
+              {messages.map((msg, idx) => {
+                const currentDateStr = formatMessageDate(msg.timestamp);
+                const prevDateStr = idx > 0 ? formatMessageDate(messages[idx - 1].timestamp) : null;
+                const showDate = idx === 0 || currentDateStr !== prevDateStr;
+                const exactDateStr = formatMessageDateString(msg.timestamp);
+                const isTodayStr = currentDateStr === 'Today';
+
+                return (
+                  <React.Fragment key={`chat-msg-${msg.id || ''}-${idx}`}>
+                    {showDate && (
+                      <div className="flex flex-col items-center gap-1.5 my-5 select-none">
+                        <span className="bg-[#3c40c6]/10 text-[#2f329f] text-[10px] font-black px-3.5 py-1 rounded-full uppercase tracking-wider shadow-2xs border border-[#3c40c6]/10">
+                          {exactDateStr}
+                        </span>
+                        {isTodayStr && (
+                          <span className="bg-[#3c40c6]/15 text-[#2f329f] text-[10px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider shadow-3xs">
+                            TODAY
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      className={`flex items-start gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                    >
+                      {/* Rounded Avatar next to bubbles */}
+                      {msg.role === 'user' ? (
+                        <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-800 shrink-0 shadow-3xs border border-slate-300">
+                          {userPhoto ? (
+                            <img src={userPhoto} alt="" className="w-full h-full rounded-full object-cover" />
+                          ) : (
+                            <User size={16} className="stroke-[2.5]" />
+                          )}
+                        </div>
+                      ) : (
+                        <DoctorLogo className="w-9 h-9 text-[#3c40c6] shrink-0" />
+                      )}
+
+                      {/* Flex column for Chat Bubble and action buttons below */}
+                      <div className="flex flex-col max-w-[80%] md:max-w-[72%]">
+                        {/* Chat Bubble */}
+                        <div className={`relative px-4 py-3 shadow-3xs flex flex-col ${
+                          msg.role === 'user' 
+                            ? 'bg-[#e2f7cb] text-[#1f1f1f] rounded-[18px] rounded-tr-none' 
+                            : 'bg-white text-[#1f1f1f] rounded-[18px] rounded-tl-none border border-slate-100'
+                        }`}>
+                          <div className="prose prose-sm max-w-none text-[14.5px] leading-relaxed break-words text-[#1f1f1f]">
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          </div>
+                          
+                          {/* Timestamp & Tick */}
+                          <div className="flex items-center self-end gap-1 mt-1.5">
+                            <span className="text-[9.5px] text-slate-400 font-medium select-none">
+                              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            {msg.role === 'user' && (
+                              <CheckCheck size={13} className="text-emerald-500" />
+                            )}
+                          </div>
+
+                          {/* Aesthetic Tails */}
+                          {msg.role === 'user' && (
+                            <svg className="absolute top-0 -right-[8px]" width="9" height="13" viewBox="0 0 10 15">
+                              <path d="M0 0 L 10 0 C 7 3 3 8 0 15 Z" fill="#e2f7cb" />
+                            </svg>
+                          )}
+                          
+                          {msg.role === 'assistant' && (
+                            <svg className="absolute top-0 -left-[8px]" width="9" height="13" viewBox="0 0 10 15">
+                              <path d="M10 0 L 0 0 C 3 3 7 8 10 15 Z" fill="#ffffff" />
+                            </svg>
+                          )}
+                        </div>
+
+                        {/* Speaker and copy button OUTSIDE of the reply box */}
+                        {msg.role === 'assistant' && (
+                          <div className="flex items-center gap-3 mt-1.5 px-2">
+                            <button 
+                              onClick={() => handleSpeakText(msg.content)} 
+                              className="text-[10px] text-[#3c40c6] font-black hover:text-[#2f329f] transition-colors flex items-center gap-1 select-none cursor-pointer"
+                            >
+                              <span>🔊 Speak</span>
+                            </button>
+                            <button 
+                              onClick={() => handleCopyText(msg.content)} 
+                              className="text-[10px] text-slate-400 font-black hover:text-slate-600 transition-colors flex items-center gap-1 select-none cursor-pointer"
+                            >
+                              <span>📋 Copy</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </React.Fragment>
+                );
+              })}
+
+              {isLoading && (
+                <div className="flex justify-start items-start gap-2.5">
+                  <DoctorLogo className="w-9 h-9 text-[#3c40c6] shrink-0" />
+                  <div className="bg-white px-4 py-3 rounded-[18px] rounded-tl-none shadow-3xs border border-slate-100">
+                    <div className="flex gap-1.5 py-1">
+                      <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2 }} className="w-2 h-2 bg-[#3c40c6] rounded-full" />
+                      <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.2 }} className="w-2 h-2 bg-[#3c40c6] rounded-full" />
+                      <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.4 }} className="w-2 h-2 bg-[#3c40c6] rounded-full" />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {/* Input Bar & Suggestions Section */}
+          <div className="bg-[#f0f2f5] border-t border-slate-200/80 shrink-0 safe-bottom z-20 pb-4">
+            <div className="w-full">
+              {/* Quick Suggestions Panel */}
+              {showSuggestions && (
+                <div className="p-3 bg-[#eef1f4] border-b border-slate-200">
+                  <div className="flex items-center justify-between px-1 mb-2">
+                    <span className="text-[9px] font-extrabold text-slate-500 tracking-wider uppercase flex items-center gap-1 select-none">
+                      💡 SUGGESTIONS
+                    </span>
+                    <button onClick={() => setShowSuggestions(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  
+                  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scrollbar-hide">
+                    {SUGGESTED_PROMPTS.map((item, idx) => {
+                      const isActiveStyle = idx === 0;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleSendMessage(item.prompt)}
+                          className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap active:scale-95 shadow-3xs ${
+                            isActiveStyle 
+                              ? 'border-2 border-black bg-white text-black font-black' 
+                              : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-400'
+                          }`}
+                        >
+                          {item.icon}
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Input Row */}
+              <div className="px-4 pt-3 flex items-center gap-3">
+                {/* Main Input Pill */}
+                <div className="flex-1">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Type a message..."
+                    className="w-full bg-white border border-slate-200 rounded-full py-3.5 px-5 text-[14px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#3c40c6]/30 placeholder:text-slate-400 shadow-inner"
+                  />
+                </div>
+
+                {/* Send Button styled like WhatsApp (always green, white send icon) */}
                 <button
-                  key={idx}
-                  onClick={() => handleSendMessage(item.prompt)}
-                  className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-white/[0.03] border border-white/5 rounded-full text-xs font-bold text-white/60 hover:bg-white/[0.08] hover:text-white transition-all whitespace-nowrap active:scale-95"
+                  onClick={() => handleSendMessage()}
+                  disabled={isLoading}
+                  className="p-3.5 rounded-full bg-[#00a884] hover:bg-[#008f72] text-white transition-all shadow-md active:scale-90 flex items-center justify-center shrink-0 cursor-pointer"
+                  title="Send Message"
                 >
-                  <span className="text-accent">{item.icon}</span>
-                  {item.label}
+                  {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className="stroke-[2.5]" />}
                 </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="flex-1 relative">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Ask about medications..."
-                  className="w-full bg-[#2a3942] border border-white/5 rounded-[22px] py-4 px-6 text-[15px] text-white focus:outline-none focus:ring-1 focus:ring-accent/20 placeholder:text-white/20 shadow-inner"
-                />
               </div>
-              <button
-                onClick={() => handleSendMessage()}
-                disabled={!input.trim() || isLoading}
-                className={`p-4 rounded-full transition-all shadow-xl ${
-                  input.trim() && !isLoading 
-                    ? 'bg-[#00a884] text-white scale-100 active:scale-90 hover:shadow-emerald-500/20' 
-                    : 'bg-[#2a3942] text-white/10'
-                }`}
-              >
-                {isLoading ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}
-              </button>
             </div>
           </div>
-        </div>
-      </main>
-    </motion.div>
+        </main>
+      </motion.div>
+    </>
   );
 };

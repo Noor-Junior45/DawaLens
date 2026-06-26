@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Camera, Download, Upload, Info, Settings, Search, X, History, Trash2, ShieldAlert, CheckCircle2, Bot, Stethoscope, Mail, Heart, ListTodo } from 'lucide-react';
+import { Plus, Camera, Download, Upload, Info, Settings, Search, X, History, Trash2, ShieldAlert, CheckCircle2, Bot, Stethoscope, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import { Medicine } from './types';
@@ -9,9 +9,6 @@ import { MedicineList } from './components/MedicineList';
 import { SettingsModal } from './components/SettingsModal';
 import { ChatView } from './components/ChatView';
 import { MailboxModal } from './components/MailboxModal';
-import { DailySummaryWidget } from './components/DailySummaryWidget';
-import { HealthSyncModal } from './components/HealthSyncModal';
-import { GoogleTasksModal } from './components/GoogleTasksModal';
 import { extractMedicineData } from './services/geminiService';
 import { 
   auth, db, storage, googleProvider, signInWithPopup, signOut, onAuthStateChanged, 
@@ -24,10 +21,8 @@ import { AdBanner } from './components/AdBanner';
 import { checkDrugInteractions, InteractionResult } from './services/geminiService';
 
 import { CookieConsentBanner } from './components/CookieConsentBanner';
+import { DoctorLogo } from './components/DoctorLogo';
 
-// Cryptographic E2EE & CAPTCHA security imports
-import { generateMasterE2EEKey, importMasterKey, encryptField, decryptField } from './utils/crypto';
-import { CaptchaGate } from './components/CaptchaGate';
 import { triggerLightHaptic, triggerSuccessHaptic } from './utils/haptics';
 
 export default function App() {
@@ -37,8 +32,6 @@ export default function App() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isHealthSyncOpen, setIsHealthSyncOpen] = useState(false);
-  const [isGoogleTasksOpen, setIsGoogleTasksOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isMailboxOpen, setIsMailboxOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
@@ -58,38 +51,6 @@ export default function App() {
   const [isLikedOnly, setIsLikedOnly] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
-  // E2EE Zero-Knowledge State Variables
-  const [e2eeEnabled, setE2eeEnabled] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('mediscan_e2ee_enabled') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const [rawKeyString, setRawKeyString] = useState<string>(() => {
-    try {
-      return localStorage.getItem('mediscan_e2ee_key') || '';
-    } catch {
-      return '';
-    }
-  });
-
-  const [masterKey, setMasterKey] = useState<CryptoKey | null>(null);
-  const [rawMedicines, setRawMedicines] = useState<Medicine[]>([]);
-
-  // CAPTCHA Guard States
-  const [captchaEnabled, setCaptchaEnabled] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('mediscan_captcha_enabled') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const [isCaptchaOpen, setIsCaptchaOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<{ type: string; execute: () => void } | null>(null);
-
   // Google Site Verification Dynamic Header Injection
   useEffect(() => {
     try {
@@ -107,61 +68,6 @@ export default function App() {
       console.warn('Failed to load Google Site Verification meta tag:', e);
     }
   }, []);
-
-  // Derive cryptographic key object when key or E2EE state is altered
-  useEffect(() => {
-    const loadCryptoKey = async () => {
-      if (e2eeEnabled && rawKeyString) {
-        try {
-          const key = await importMasterKey(rawKeyString);
-          setMasterKey(key);
-        } catch (e) {
-          console.error("Failed to import E2EE key:", e);
-        }
-      } else {
-        setMasterKey(null);
-      }
-    };
-    loadCryptoKey();
-  }, [e2eeEnabled, rawKeyString]);
-
-  // Seamless generic CAPTCHA validator helper
-  const runActionWithCaptcha = (actionType: string, callback: () => void) => {
-    if (captchaEnabled) {
-      setPendingAction({ type: actionType, execute: callback });
-      setIsCaptchaOpen(true);
-    } else {
-      callback();
-    }
-  };
-
-  const handleToggleE2ee = async (enabled: boolean) => {
-    try {
-      if (enabled) {
-        let keyStr = rawKeyString;
-        if (!keyStr) {
-          keyStr = await generateMasterE2EEKey();
-          setRawKeyString(keyStr);
-          localStorage.setItem('mediscan_e2ee_key', keyStr);
-        }
-        setE2eeEnabled(true);
-        localStorage.setItem('mediscan_e2ee_enabled', 'true');
-        const key = await importMasterKey(keyStr);
-        setMasterKey(key);
-      } else {
-        setE2eeEnabled(false);
-        localStorage.setItem('mediscan_e2ee_enabled', 'false');
-        setMasterKey(null);
-      }
-    } catch (e) {
-      console.error("Failed to change encryption toggle:", e);
-    }
-  };
-
-  const handleToggleCaptcha = (enabled: boolean) => {
-    setCaptchaEnabled(enabled);
-    localStorage.setItem('mediscan_captcha_enabled', enabled ? 'true' : 'false');
-  };
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isEmailLoginOpen, setIsEmailLoginOpen] = useState(false);
@@ -218,7 +124,6 @@ export default function App() {
   // Sync Medicines from Firestore
   useEffect(() => {
     if (!user) {
-      setRawMedicines([]);
       setMedicines([]);
       return;
     }
@@ -233,71 +138,13 @@ export default function App() {
       const medsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Medicine));
       // Deduplicate by ID to prevent React "duplicate key" warnings during sync lag or accidental duplicates
       const uniqueMeds = Array.from(new Map(medsData.map(m => [m.id, m])).values());
-      setRawMedicines(uniqueMeds);
+      setMedicines(uniqueMeds);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'medicines');
     });
 
     return () => unsubscribe();
   }, [user]);
-
-  // Client-Side Zero-Knowledge Cryptographic Decryptor Loop
-  useEffect(() => {
-    let active = true;
-
-    const decryptAll = async () => {
-      const decrypted = await Promise.all(rawMedicines.map(async (med) => {
-        if (med.isEncrypted) {
-          if (e2eeEnabled && masterKey) {
-            try {
-              const name = med.ivMap?.name ? await decryptField(med.name, med.ivMap.name, masterKey) : med.name;
-              const dosage = med.ivMap?.dosage ? await decryptField(med.dosage, med.ivMap.dosage, masterKey) : med.dosage;
-              const usageInstructions = med.ivMap?.usageInstructions ? await decryptField(med.usageInstructions, med.ivMap.usageInstructions, masterKey) : med.usageInstructions;
-              const schedule = med.ivMap?.schedule && med.schedule ? await decryptField(med.schedule, med.ivMap.schedule, masterKey) : med.schedule;
-
-              return {
-                ...med,
-                name,
-                dosage,
-                usageInstructions,
-                schedule,
-                _isDecrypted: true
-              };
-            } catch (err) {
-              console.error(`E2EE Decrypt mismatch or error on ${med.id}:`, err);
-              return {
-                ...med,
-                name: "🔐 [E2EE Vault Locked]",
-                dosage: "[Locked]",
-                usageInstructions: "[Key mismatch or missing context]",
-                schedule: "[Locked]",
-                _isDecrypted: false
-              };
-            }
-          } else {
-            return {
-              ...med,
-              name: "🔐 [E2EE Vault Locked]",
-              dosage: "[Locked]",
-              usageInstructions: "[Encryption enabled but key context missing in browser]",
-              schedule: "[Locked]",
-              _isDecrypted: false
-            };
-          }
-        }
-        return med;
-      }));
-
-      if (active) {
-        setMedicines(decrypted);
-      }
-    };
-
-    decryptAll();
-    return () => {
-      active = false;
-    };
-  }, [rawMedicines, masterKey, e2eeEnabled]);
 
   // Background Notification Check (Browser and Email)
   useEffect(() => {
@@ -631,12 +478,6 @@ export default function App() {
   };
 
   const handleSave = async (data: Partial<Medicine>) => {
-    runActionWithCaptcha("save", () => {
-      executeSave(data);
-    });
-  };
-
-  const executeSave = async (data: Partial<Medicine>) => {
     if (!user || isSaving) return;
     setIsSaving(true);
 
@@ -693,35 +534,6 @@ export default function App() {
           );
         });
       }
-      
-      // Compute Cryptographic E2EE representations if enabled
-      let finalDataToSave = { ...firestoreData };
-      let ivMap: { [key: string]: string } = {};
-      let isEncrypted = false;
-
-      if (e2eeEnabled && masterKey) {
-        isEncrypted = true;
-        if (firestoreData.name) {
-          const enc = await encryptField(firestoreData.name.trim(), masterKey);
-          finalDataToSave.name = enc.cypherText;
-          ivMap.name = enc.iv;
-        }
-        if (firestoreData.dosage) {
-          const enc = await encryptField(firestoreData.dosage, masterKey);
-          finalDataToSave.dosage = enc.cypherText;
-          ivMap.dosage = enc.iv;
-        }
-        if (firestoreData.usageInstructions) {
-          const enc = await encryptField(firestoreData.usageInstructions, masterKey);
-          finalDataToSave.usageInstructions = enc.cypherText;
-          ivMap.usageInstructions = enc.iv;
-        }
-        if (firestoreData.schedule) {
-          const enc = await encryptField(firestoreData.schedule, masterKey);
-          finalDataToSave.schedule = enc.cypherText;
-          ivMap.schedule = enc.iv;
-        }
-      }
 
       const normalizedName = (firestoreData.name || '').toLowerCase().trim();
       const existingMed = medicines.find(m => 
@@ -745,19 +557,14 @@ export default function App() {
           updatedAt: serverTimestamp() // Ensure cloud sync timestamp
         };
 
-        if (isEncrypted) {
-          updateData.isEncrypted = true;
-          updateData.ivMap = { ...(existingMed.ivMap || {}), ...ivMap };
-        }
-
         if (existingMed.dosage === 'N/A' && firestoreData.dosage) {
-          updateData.dosage = finalDataToSave.dosage;
+          updateData.dosage = firestoreData.dosage;
         }
         if (!existingMed.usageInstructions && firestoreData.usageInstructions) {
-          updateData.usageInstructions = finalDataToSave.usageInstructions;
+          updateData.usageInstructions = firestoreData.usageInstructions;
         }
         if (firestoreData.schedule || existingMed.schedule) {
-          updateData.schedule = finalDataToSave.schedule || existingMed.schedule || null;
+          updateData.schedule = firestoreData.schedule || existingMed.schedule || null;
         }
 
         batch.set(medRef, updateData, { merge: true });
@@ -779,16 +586,11 @@ export default function App() {
         const medRef = doc(db, 'medicines', editingMedicine.id);
         const updateData: any = { 
           ...editingMedicine, 
-          ...finalDataToSave, 
+          ...firestoreData, 
           userId: user.uid,
           imageUrl: imageUrl || editingMedicine.imageUrl || null,
           updatedAt: serverTimestamp()
         };
-        
-        if (isEncrypted) {
-          updateData.isEncrypted = true;
-          updateData.ivMap = ivMap;
-        }
 
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
@@ -814,24 +616,19 @@ export default function App() {
         const id = crypto.randomUUID();
         const newMed: any = {
           id,
-          name: finalDataToSave.name || 'Unknown',
-          dosage: finalDataToSave.dosage || 'N/A',
-          expirationDate: finalDataToSave.expirationDate || new Date().toISOString().split('T')[0],
-          usageInstructions: finalDataToSave.usageInstructions || '',
-          schedule: finalDataToSave.schedule || '',
+          name: firestoreData.name || 'Unknown',
+          dosage: firestoreData.dosage || 'N/A',
+          expirationDate: firestoreData.expirationDate || new Date().toISOString().split('T')[0],
+          usageInstructions: firestoreData.usageInstructions || '',
+          schedule: firestoreData.schedule || '',
           createdAt: serverTimestamp(),
           userId: user.uid,
-          form: finalDataToSave.form || 'other',
+          form: firestoreData.form || 'other',
           imageUrl: imageUrl || null
         };
 
         if (firestoreData.quantity !== undefined) {
           newMed.quantity = firestoreData.quantity;
-        }
-
-        if (isEncrypted) {
-          newMed.isEncrypted = true;
-          newMed.ivMap = ivMap;
         }
 
         batch.set(doc(db, 'medicines', id), newMed);
@@ -971,12 +768,6 @@ export default function App() {
   };
 
   const confirmClearData = async () => {
-    runActionWithCaptcha("clear", () => {
-      executeClearData();
-    });
-  };
-
-  const executeClearData = async () => {
     if (!user || isSaving) return;
     setIsSaving(true);
     try {
@@ -1113,7 +904,7 @@ export default function App() {
                 createdAt: Date.now(),
                 userId: user.uid,
                 form: validForm,
-                ...(addQty > 0 ? { quantity: addQty } : {}),
+                ...(quantity !== undefined && !isNaN(quantity) ? { quantity: addQty } : {}),
               };
               newMedsMap.set(key, newMed);
               count++;
@@ -1514,14 +1305,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Daily Summary & Wellness Dashboard Widget */}
-        <DailySummaryWidget 
-          medicines={medicines}
-          onToggleTaken={handleToggleTaken}
-          lowQuantityThreshold={lowQuantityThreshold}
-          alertThreshold={alertThreshold}
-        />
-
         {/* Filters */}
         <div className="px-4 mb-6 flex flex-wrap gap-2">
           <button 
@@ -1598,10 +1381,10 @@ export default function App() {
 
           <button 
             onClick={() => setIsChatOpen(true)}
-            className="flex-none py-2 px-4 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 active:scale-95 hover:opacity-80"
+            className="flex-1 py-2 flex flex-col items-center gap-1 transition-all hover:opacity-80"
             style={{ color: 'var(--accent-color)' }}
           >
-            <Stethoscope size={20} />
+            <DoctorLogo className="w-5 h-5" />
             <span className="text-[9px] font-bold uppercase tracking-widest">Consult</span>
           </button>
         </div>
@@ -1689,18 +1472,10 @@ export default function App() {
             deletedMedicines={deletedMedicines}
             onRestore={handleRestore}
             onPermanentDelete={handlePermanentDelete}
-            // Security props
-            e2eeEnabled={e2eeEnabled}
-            onToggleE2ee={handleToggleE2ee}
-            rawKeyString={rawKeyString}
-            captchaEnabled={captchaEnabled}
-            onToggleCaptcha={handleToggleCaptcha}
             // Integrations
             onImportCSV={handleImport}
             onExportCSV={exportToSheets}
             onOpenMailbox={() => setIsMailboxOpen(true)}
-            onOpenHealthSync={() => setIsHealthSyncOpen(true)}
-            onOpenGoogleTasks={() => setIsGoogleTasksOpen(true)}
             // Screenshot navigation matching
             onResetToHome={() => { setFilter('all'); setSearchQuery(''); setIsLikedOnly(false); }}
             onToggleLikedOnly={() => setIsLikedOnly(!isLikedOnly)}
@@ -1715,43 +1490,6 @@ export default function App() {
             medicines={medicines}
           />
         )}
-
-        {isHealthSyncOpen && (
-          <HealthSyncModal 
-            onClose={() => setIsHealthSyncOpen(false)}
-            medicines={medicines}
-            accentColor={accentColor}
-          />
-        )}
-
-        {isGoogleTasksOpen && (
-          <GoogleTasksModal 
-            onClose={() => setIsGoogleTasksOpen(false)}
-            medicines={medicines}
-            accentColor={accentColor}
-          />
-        )}
-
-        {/* Security CAPTCHA Gate Modal Overlay */}
-        <AnimatePresence>
-          {isCaptchaOpen && pendingAction && (
-            <CaptchaGate
-              actionName={pendingAction.type === 'clear' ? "Clear All Medication History" : "Save Cloud Medication Info"}
-              onSuccess={() => {
-                if (pendingAction.execute) {
-                  pendingAction.execute();
-                }
-                setIsCaptchaOpen(false);
-                setPendingAction(null);
-              }}
-              onCancel={() => {
-                setIsCaptchaOpen(false);
-                setPendingAction(null);
-                setAlertMessage("Action canceled because security CAPTCHA was not solved.");
-              }}
-            />
-          )}
-        </AnimatePresence>
 
         {isInteractionModalOpen && interactionResult && (
           <motion.div 

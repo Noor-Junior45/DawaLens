@@ -338,7 +338,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
                   
                   return (
                     <button
-                      key={`${mail.id}-${idx}`}
+                      key={mail.id}
                       onClick={() => setSelectedEmail(mail)}
                       className={`w-full text-left p-5 transition-all flex flex-col gap-2 border-l-[3px] ${
                         isSelected 
