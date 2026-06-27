@@ -1,10 +1,15 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { 
+  getExtractionCache, 
+  saveExtractionCache, 
+  getInteractionCache, 
+  saveInteractionCache, 
+  extractMedicineDataServer, 
+  checkDrugInteractionsServer, 
+  chatWithGeminiServer 
+} from "./server/aiService";
 
 async function startServer() {
   const app = express();
@@ -119,7 +124,6 @@ async function startServer() {
   app.post("/api/ai/extract-cache", async (req, res) => {
     try {
       const { imageHash } = req.body;
-      const { getExtractionCache } = await import("./server/aiService.js");
       const result = await getExtractionCache(imageHash);
       res.json(result);
     } catch (error) {
@@ -130,7 +134,6 @@ async function startServer() {
   app.post("/api/ai/extract-save-cache", async (req, res) => {
     try {
       const { imageHash, data } = req.body;
-      const { saveExtractionCache } = await import("./server/aiService.js");
       await saveExtractionCache(imageHash, data);
       res.json({ success: true });
     } catch (error) {
@@ -142,7 +145,6 @@ async function startServer() {
   app.post("/api/ai/interactions-cache", async (req, res) => {
     try {
       const { key } = req.body;
-      const { getInteractionCache } = await import("./server/aiService.js");
       const result = await getInteractionCache(key);
       res.json(result);
     } catch (error) {
@@ -153,11 +155,41 @@ async function startServer() {
   app.post("/api/ai/interactions-save-cache", async (req, res) => {
     try {
       const { key, data } = req.body;
-      const { saveInteractionCache } = await import("./server/aiService.js");
       await saveInteractionCache(key, data);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Actual Gemini API Proxies
+  app.post("/api/ai/extract", async (req, res) => {
+    try {
+      const { base64Image } = req.body;
+      const result = await extractMedicineDataServer(base64Image);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, errorMessage: error.message || String(error) });
+    }
+  });
+
+  app.post("/api/ai/interactions", async (req, res) => {
+    try {
+      const { medicines } = req.body;
+      const result = await checkDrugInteractionsServer(medicines);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || String(error) });
+    }
+  });
+
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const { messages } = req.body;
+      const responseText = await chatWithGeminiServer(messages);
+      res.json({ responseText });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || String(error) });
     }
   });
 

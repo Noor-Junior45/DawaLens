@@ -1,43 +1,9 @@
 import { MedicineForm, ChatMessage } from "../types";
-import { GoogleGenAI, Type } from "@google/genai";
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY || '' });
 
 export const isProviderKeyMissing = (provider: 'gemini' | 'deepseek') => {
-  if (provider === 'gemini') return !GEMINI_API_KEY;
+  // Key check is done on the server side to protect user secrets.
   return false;
 };
-
-// Helper to provide descriptive errors for better diagnostics in India/Global regions
-const getDetailedError = (error: any, provider: 'gemini' | 'deepseek' = 'gemini') => {
-  if (provider === 'gemini' && !GEMINI_API_KEY) return "Gemini API Key is missing. Please go to 'Settings' (gear icon) -> 'Secrets' in the AI Studio menu to add your GEMINI_API_KEY.";
-  
-  const msg = error.message || String(error);
-
-  // Specific Gemini error handling
-  if (provider === 'gemini') {
-    if (msg.includes('400')) return "Gemini Image Error (400). The AI had trouble processing this specific image. Please try a clearer, closer photo with better lighting.";
-    if (msg.includes('403')) return "Gemini Access Denied (403). Ensure the 'Generative Language API' is enabled in your Google Cloud project and your key is correct.";
-    if (msg.includes('404')) return "Gemini Model Not Found (404). Switching to the latest stable model. Ensure your API key is valid.";
-    if (msg.includes('429')) return "Gemini Quota Exceeded (429). You are using the free tier. Please wait a minute before trying again.";
-  }
-  
-  return msg || `An unexpected ${provider} connection error occurred.`;
-};
-
-const SYSTEM_INSTRUCTION = `You are Dr. DawaLens, a professional, empathetic, and highly knowledgeable Medical Doctor. Your role is to guide patients through their medication inventory with precision and care.
-
-CRITICAL INSTRUCTIONS:
-1. INVENTORY SCAN: You have direct access to the user's "Patient Profile & Storage Context". When the user asks about an ailment (e.g., "I have a headache") or a category (e.g., "What painkillers do I have?"), you MUST perform a meticulous scan of their 'User's Stored Medicines'.
-2. BE EXHAUSTIVE: If a user asks what they have, list ALL relevant medicines found in their inventory. Never say "I don't see any" unless you have double-checked the exact names provided in the context.
-3. ADVICE STRUCTURE: 
-   - First, tell them exactly what they already have that can help.
-   - Second, provide professional advice on how to use it safely.
-   - Third, only if they have nothing relevant, suggest standard over-the-counter options.
-4. TONE: Professional, supportive, and clear. Use Markdown for structured lists and bolding key terms.
-5. NO REPETITIVE DISCLAIMERS: A mandatory safety disclaimer is shown in the UI daily. Do not add "I am an AI..." or "Consult a doctor..." to EVERY message. Only include it if giving high-risk advice.
-6. CONTEXT AWARENESS: Always prioritize the medicines the user already owns. Treat the provided inventory as the absolute source of truth for their 'vault'.`;
 
 export interface ExtractedMedicine {
   name: string;
@@ -69,122 +35,40 @@ export interface InteractionResult {
   generalAdvice: string;
 }
 
-async function generateImageHash(base64Image: string): Promise<string> {
-  const msgUint8 = new TextEncoder().encode(base64Image.slice(-1000));
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 export async function extractMedicineData(base64Image: string): Promise<ExtractionResult> {
   try {
-    if (!GEMINI_API_KEY) throw new Error("API Key is missing");
-
-    const imageHash = await generateImageHash(base64Image);
-    
-    // Check cache
-    const cacheResponse = await fetch('/api/ai/extract-cache', {
+    const response = await fetch('/api/ai/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageHash })
+      body: JSON.stringify({ base64Image })
     });
     
-    if (cacheResponse.ok) {
-      const cached = await cacheResponse.json();
-      if (cached.found) return cached.data;
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.errorMessage || errData.error || "Failed to extract medicine data from image.");
     }
-
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
-      contents: {
-        parts: [
-          { inlineData: { mimeType: "image/jpeg", data: base64Image } },
-          { 
-            text: `You are a medical data extraction expert. 
-            Perform exhaustive OCR to extract all visible text from the packaging.
-            Then, identify:
-            - Name: Medicine name.
-            - Dosage: Strength.
-            - Expiration Date: Format YYYY-MM-DD (use end of month if only MM/YYYY is given).
-            - Usage Instructions: Daily frequency/instructions.
-            - Form: tablet, capsule, syrup, ampule, powder, liquid, or other.
-            - Quantity: Number of units.` 
-          }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            dosage: { type: Type.STRING },
-            expirationDate: { type: Type.STRING },
-            usageInstructions: { type: Type.STRING },
-            form: { type: Type.STRING, enum: ["tablet", "capsule", "syrup", "ampule", "powder", "tape", "liquid", "other"] },
-            quantity: { type: Type.NUMBER }
-          },
-          required: ["name", "dosage", "expirationDate", "form"]
-        }
-      }
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("AI returned empty response");
     
-    const result = JSON.parse(text);
-    const extractionResult = { success: true, medicine: result };
-
-    fetch('/api/ai/extract-save-cache', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageHash, data: extractionResult })
-    }).catch(console.warn);
-
-    return extractionResult;
+    return await response.json();
   } catch (error: any) {
     console.error("Extraction error:", error);
-    return { success: false, errorMessage: getDetailedError(error) };
+    return { success: false, errorMessage: error.message || String(error) };
   }
 }
 
 export async function checkDrugInteractions(medicines: { name: string; dosage: string }[]): Promise<InteractionResult | null> {
   try {
-    if (!GEMINI_API_KEY) throw new Error("API Key is missing");
-
-    const medNames = medicines.map(m => m.name).sort().join('|');
-    
-    const cacheResponse = await fetch('/api/ai/interactions-cache', {
+    const response = await fetch('/api/ai/interactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: medNames })
+      body: JSON.stringify({ medicines })
     });
-
-    if (cacheResponse.ok) {
-      const cached = await cacheResponse.json();
-      if (cached.found) return cached.data;
+    
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error || "Failed to check drug interactions.");
     }
-
-    const prompt = `Act as a medical expert. Check for drug-drug interactions between these medications: ${medicines.map(m => `${m.name} (${m.dosage})`).join(', ')}. 
-    Return JSON: { hasInteractions: boolean, interactions: [{ medications: string[], severity: "low"|"moderate"|"high", description: string, recommendation: string }], generalAdvice: string }`;
     
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: { responseMimeType: "application/json" }
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("AI returned empty response");
-    const result = JSON.parse(text);
-
-    fetch('/api/ai/interactions-save-cache', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: medNames, data: result })
-    }).catch(console.warn);
-
-    return result;
+    return await response.json();
   } catch (error) {
     console.error('Interaction check failed:', error);
     return null;
@@ -197,27 +81,21 @@ export async function chatWithAI(messages: ChatMessage[], provider: 'gemini' | '
 
 export async function chatWithGemini(messages: ChatMessage[]): Promise<string> {
   try {
-    if (!GEMINI_API_KEY) throw new Error("Gemini API Key is missing");
-
-    const history = messages.slice(0, -1).map(m => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.content }]
-    }));
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        ...history,
-        { role: 'user', parts: [{ text: messages[messages.length - 1].content }] }
-      ],
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION
-      }
+    const response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages })
     });
-
-    return response.text || "I'm sorry, I couldn't generate a response.";
-  } catch (error) {
+    
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error || "Failed to communicate with AI server.");
+    }
+    
+    const data = await response.json();
+    return data.responseText;
+  } catch (error: any) {
     console.error('Gemini Chat failed:', error);
-    return `Gemini Connection Issue: ${getDetailedError(error, 'gemini')}`;
+    return `Gemini Connection Issue: ${error.message || String(error)}`;
   }
 }

@@ -11,13 +11,19 @@
         "expirationDate": { "type": "string", "format": "date" },
         "usageInstructions": { "type": "string" },
         "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
         "userId": { "type": "string" },
         "capturedImage": { "type": "string" },
+        "imageUrl": { "type": "string" },
         "quantity": { "type": "number" },
         "taken": { "type": "boolean" },
         "isDeleted": { "type": "boolean" },
         "deletedAt": { "type": ["number", "null"] },
-        "form": { "type": "string", "enum": ["tablet", "capsule", "syrup", "ampule", "powder", "other"] }
+        "form": { "type": "string", "enum": ["tablet", "capsule", "syrup", "ampule", "powder", "other"] },
+        "schedule": { "type": "string" },
+        "liked": { "type": "boolean" },
+        "isEncrypted": { "type": "boolean" },
+        "ivMap": { "type": "object" }
       },
       "required": ["id", "name", "dosage", "expirationDate", "userId"]
     },

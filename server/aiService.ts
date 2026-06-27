@@ -1,6 +1,48 @@
-import { getCachedMedicine, setCachedMedicine, getExtractionData, setExtractionData } from "../medCache.js";
+import { getCachedMedicine, setCachedMedicine, getExtractionData, setExtractionData } from "../medCache";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const interactionCache = new Map<string, any>();
+
+// Initialize Gemini safely with telemetry header
+const getAIClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  return new GoogleGenAI({
+    apiKey: apiKey || '',
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build'
+      }
+    }
+  });
+};
+
+// Error formatter
+const getDetailedError = (error: any, context: 'chat' | 'extraction' | 'interaction') => {
+  const msg = error.message || String(error);
+  if (msg.includes('400')) {
+    if (context === 'extraction') {
+      return "Gemini Image Error (400). The AI had trouble processing this specific image. Please try a clearer, closer photo with better lighting.";
+    }
+    return `Gemini Request Error (400). The AI had trouble processing your request. Please check your inputs or try again.`;
+  }
+  if (msg.includes('403')) return "Gemini Access Denied (403). Ensure your GEMINI_API_KEY is correct and configured properly.";
+  if (msg.includes('404')) return "Gemini Model Not Found (404). Please ensure the requested model is valid.";
+  if (msg.includes('429')) return "Gemini Quota Exceeded (429). You are on the free tier. Please wait a minute before trying again.";
+  return msg;
+};
+
+const SYSTEM_INSTRUCTION = `You are Dr. DawaLens, a professional, empathetic, and highly knowledgeable Medical Doctor. Your role is to guide patients through their medication inventory with precision and care.
+
+CRITICAL INSTRUCTIONS:
+1. INVENTORY SCAN: You have direct access to the user's "Patient Profile & Storage Context". When the user asks about an ailment (e.g., "I have a headache") or a category (e.g., "What painkillers do I have?"), you MUST perform a meticulous scan of their 'User's Stored Medicines'.
+2. BE EXHAUSTIVE: If a user asks what they have, list ALL relevant medicines found in their inventory. Never say "I don't see any" unless you have double-checked the exact names provided in the context.
+3. ADVICE STRUCTURE: 
+   - First, tell them exactly what they already have that can help.
+   - Second, provide professional advice on how to use it safely.
+   - Third, only if they have nothing relevant, suggest standard over-the-counter options.
+4. TONE: Professional, supportive, and clear. Use Markdown for structured lists and bolding key terms.
+5. NO REPETITIVE DISCLAIMERS: A mandatory safety disclaimer is shown in the UI daily. Do not add "I am an AI..." or "Consult a doctor..." to EVERY message. Only include it if giving high-risk advice.
+6. CONTEXT AWARENESS: Always prioritize the medicines the user already owns. Treat the provided inventory as the absolute source of truth for their 'vault'.`;
 
 // Extraction Cache logic
 export async function getExtractionCache(imageHash: string) {
@@ -50,3 +92,132 @@ export async function saveInteractionCache(key: string, data: any) {
   interactionCache.set(key, data);
 }
 
+// Actual Gemini API logic on Server
+export async function extractMedicineDataServer(base64Image: string) {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("Gemini API Key is missing. Please configure it in your environment.");
+    }
+
+    const ai = getAIClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [
+        { inlineData: { mimeType: "image/jpeg", data: base64Image } },
+        { 
+          text: `You are a medical data extraction expert. 
+          Perform exhaustive OCR to extract all visible text from the packaging.
+          Then, identify:
+          - Name: Medicine name.
+          - Dosage: Strength.
+          - Expiration Date: Format YYYY-MM-DD (use end of month if only MM/YYYY is given).
+          - Usage Instructions: Daily frequency/instructions.
+          - Form: tablet, capsule, syrup, ampule, powder, liquid, or other.
+          - Quantity: Number of units.` 
+        }
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            dosage: { type: Type.STRING },
+            expirationDate: { type: Type.STRING },
+            usageInstructions: { type: Type.STRING },
+            form: { type: Type.STRING, enum: ["tablet", "capsule", "syrup", "ampule", "powder", "tape", "liquid", "other"] },
+            quantity: { type: Type.NUMBER }
+          },
+          required: ["name", "dosage", "expirationDate", "form"]
+        }
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("AI returned empty response");
+    
+    const result = JSON.parse(text);
+    return { success: true, medicine: result };
+  } catch (error: any) {
+    console.error("Server extraction error:", error);
+    return { success: false, errorMessage: getDetailedError(error, 'extraction') };
+  }
+}
+
+export async function checkDrugInteractionsServer(medicines: { name: string; dosage: string }[]) {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("Gemini API Key is missing. Please configure it in your environment.");
+    }
+
+    const ai = getAIClient();
+    const prompt = `Act as a medical expert. Check for drug-drug interactions between these medications: ${medicines.map(m => `${m.name} (${m.dosage})`).join(', ')}. 
+    Return JSON: { hasInteractions: boolean, interactions: [{ medications: string[], severity: "low"|"moderate"|"high", description: string, recommendation: string }], generalAdvice: string }`;
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            hasInteractions: { type: Type.BOOLEAN },
+            interactions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  medications: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  severity: { type: Type.STRING, enum: ["low", "moderate", "high"] },
+                  description: { type: Type.STRING },
+                  recommendation: { type: Type.STRING }
+                },
+                required: ["medications", "severity", "description", "recommendation"]
+              }
+            },
+            generalAdvice: { type: Type.STRING }
+          },
+          required: ["hasInteractions", "interactions", "generalAdvice"]
+        }
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("AI returned empty response");
+    return JSON.parse(text);
+  } catch (error: any) {
+    console.error("Server interaction check error:", error);
+    throw new Error(getDetailedError(error, 'interaction'));
+  }
+}
+
+export async function chatWithGeminiServer(messages: any[]) {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("Gemini API Key is missing. Please configure it in your environment.");
+    }
+
+    const ai = getAIClient();
+    const history = messages.slice(0, -1).map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.content }]
+    }));
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [
+        ...history,
+        { role: 'user', parts: [{ text: messages[messages.length - 1].content }] }
+      ],
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION
+      }
+    });
+
+    return response.text || "I'm sorry, I couldn't generate a response.";
+  } catch (error: any) {
+    console.error("Server chat error:", error);
+    throw new Error(getDetailedError(error, 'chat'));
+  }
+}

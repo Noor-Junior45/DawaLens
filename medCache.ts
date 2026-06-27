@@ -1,11 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const dbPath = path.join(__dirname, 'med_cache.db');
+const dbPath = path.join(process.cwd(), 'med_cache.db');
 const db = new Database(dbPath);
 
 // Initialize tables
