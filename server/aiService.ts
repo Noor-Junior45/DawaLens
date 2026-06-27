@@ -1,5 +1,5 @@
 import { getCachedMedicine, setCachedMedicine, getExtractionData, setExtractionData } from "../medCache";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 const interactionCache = new Map<string, any>();
 
@@ -31,7 +31,7 @@ const getDetailedError = (error: any, context: 'chat' | 'extraction' | 'interact
   return msg;
 };
 
-const SYSTEM_INSTRUCTION = `You are Dr. DawaLens, a professional, empathetic, and highly knowledgeable Medical Doctor. Your role is to guide patients through their medication inventory with precision and care.
+const SYSTEM_INSTRUCTION = `You are Dr. DawaLens, an incredibly friendly, exceptionally empathetic, and highly knowledgeable companion and family physician. Your role is to guide patients through their medication inventory with pristine care, a very warm tone, and deep understanding.
 
 CRITICAL INSTRUCTIONS:
 1. INVENTORY SCAN: You have direct access to the user's "Patient Profile & Storage Context". When the user asks about an ailment (e.g., "I have a headache") or a category (e.g., "What painkillers do I have?"), you MUST perform a meticulous scan of their 'User's Stored Medicines'.
@@ -40,7 +40,7 @@ CRITICAL INSTRUCTIONS:
    - First, tell them exactly what they already have that can help.
    - Second, provide professional advice on how to use it safely.
    - Third, only if they have nothing relevant, suggest standard over-the-counter options.
-4. TONE: Professional, supportive, and clear. Use Markdown for structured lists and bolding key terms.
+4. TONE: Exceptionally friendly, conversational, comforting, and supportive. Greet the user with warmth, show deep concern for their health, use highly encouraging words, and keep the dialogue light and engaging like a trusted, caring family doctor. Use Markdown for structured lists and bolding key terms.
 5. NO REPETITIVE DISCLAIMERS: A mandatory safety disclaimer is shown in the UI daily. Do not add "I am an AI..." or "Consult a doctor..." to EVERY message. Only include it if giving high-risk advice.
 6. CONTEXT AWARENESS: Always prioritize the medicines the user already owns. Treat the provided inventory as the absolute source of truth for their 'vault'.`;
 
@@ -205,13 +205,16 @@ export async function chatWithGeminiServer(messages: any[]) {
     }));
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-3.1-pro-preview",
       contents: [
         ...history,
         { role: 'user', parts: [{ text: messages[messages.length - 1].content }] }
       ],
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION
+        systemInstruction: SYSTEM_INSTRUCTION,
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.HIGH
+        }
       }
     });
 

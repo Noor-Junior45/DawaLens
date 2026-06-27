@@ -10,6 +10,7 @@ import {
   checkDrugInteractionsServer, 
   chatWithGeminiServer 
 } from "./server/aiService";
+import { getChatCount, incrementChatCount } from "./medCache";
 
 async function startServer() {
   const app = express();
@@ -183,9 +184,38 @@ async function startServer() {
     }
   });
 
+  app.get("/api/ai/chat-count", async (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      const today = new Date().toISOString().split('T')[0];
+      const countResult = getChatCount.get(userId, today) as { count: number } | undefined;
+      res.json({ count: countResult ? countResult.count : 0 });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || String(error) });
+    }
+  });
+
   app.post("/api/ai/chat", async (req, res) => {
     try {
-      const { messages } = req.body;
+      const { messages, userId } = req.body;
+      
+      if (userId) {
+        const today = new Date().toISOString().split('T')[0];
+        const countResult = getChatCount.get(userId, today) as { count: number } | undefined;
+        const currentCount = countResult ? countResult.count : 0;
+        
+        if (currentCount >= 10) {
+          return res.status(429).json({ 
+            error: "You have reached your daily limit of 10 chats. Please come back tomorrow to continue your consultation with Dr. DawaLens!" 
+          });
+        }
+        
+        incrementChatCount.run(userId, today);
+      }
+      
       const responseText = await chatWithGeminiServer(messages);
       res.json({ responseText });
     } catch (error: any) {

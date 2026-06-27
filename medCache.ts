@@ -20,6 +20,20 @@ db.exec(`
     data TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS chat_limits (
+    userId TEXT,
+    date TEXT,
+    count INTEGER DEFAULT 0,
+    PRIMARY KEY (userId, date)
+  );
+`);
+
+export const getChatCount = db.prepare('SELECT count FROM chat_limits WHERE userId = ? AND date = ?');
+export const incrementChatCount = db.prepare(`
+  INSERT INTO chat_limits (userId, date, count)
+  VALUES (?, ?, 1)
+  ON CONFLICT(userId, date) DO UPDATE SET count = count + 1
 `);
 
 export const getCachedMedicine = db.prepare('SELECT * FROM medicine_cache WHERE name = ?');

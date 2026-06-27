@@ -75,16 +75,16 @@ export async function checkDrugInteractions(medicines: { name: string; dosage: s
   }
 }
 
-export async function chatWithAI(messages: ChatMessage[], provider: 'gemini' | 'deepseek' = 'gemini'): Promise<string> {
-  return chatWithGemini(messages);
+export async function chatWithAI(messages: ChatMessage[], provider: 'gemini' | 'deepseek' = 'gemini', userId?: string): Promise<string> {
+  return chatWithGemini(messages, userId);
 }
 
-export async function chatWithGemini(messages: ChatMessage[]): Promise<string> {
+export async function chatWithGemini(messages: ChatMessage[], userId?: string): Promise<string> {
   try {
     const response = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages })
+      body: JSON.stringify({ messages, userId })
     });
     
     if (!response.ok) {
@@ -96,6 +96,20 @@ export async function chatWithGemini(messages: ChatMessage[]): Promise<string> {
     return data.responseText;
   } catch (error: any) {
     console.error('Gemini Chat failed:', error);
-    return `Gemini Connection Issue: ${error.message || String(error)}`;
+    throw error; // Let caller handle the specific limit or connection errors
+  }
+}
+
+export async function getChatCountToday(userId: string): Promise<number> {
+  try {
+    const response = await fetch(`/api/ai/chat-count?userId=${encodeURIComponent(userId)}`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch chat count");
+    }
+    const data = await response.json();
+    return data.count;
+  } catch (error) {
+    console.error("Error fetching chat count:", error);
+    return 0;
   }
 }

@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Medicine, ChatMessage, ChatSession, AIProvider } from '../types';
-import { chatWithAI, isProviderKeyMissing } from '../services/geminiService';
+import { chatWithAI, isProviderKeyMissing, getChatCountToday } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 import { DoctorLogo } from './DoctorLogo';
 
@@ -44,9 +44,25 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
   const [isOnline, setIsOnline] = useState(true);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 
+  const [chatCount, setChatCount] = useState<number>(0);
+
   useEffect(() => {
     setIsOnline(!isProviderKeyMissing('gemini'));
   }, []);
+
+  // Load daily chat count
+  useEffect(() => {
+    if (!user) return;
+    const loadChatCount = async () => {
+      try {
+        const count = await getChatCountToday(user.uid);
+        setChatCount(count);
+      } catch (err) {
+        console.error("Failed to load chat count:", err);
+      }
+    };
+    loadChatCount();
+  }, [user]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +121,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
     const textToSend = customPrompt || input;
     if (!textToSend.trim() || isLoading || !user) return;
 
+    if (chatCount >= 10) {
+      alert("You have reached your daily limit of 10 chats. Please come back tomorrow to continue your consultation with Dr. DawaLens!");
+      return;
+    }
+
     const messageId = crypto.randomUUID();
     const userMsg: ChatMessage = {
       id: messageId,
@@ -145,8 +166,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
       
       const promptHistory = historyContext.slice(0, -1).concat(lastMsgWithContext);
 
-      const aiResponse = await chatWithAI(promptHistory, activeProvider);
+      const aiResponse = await chatWithAI(promptHistory, activeProvider, user.uid);
       setIsOnline(true);
+      setChatCount(prev => Math.min(10, prev + 1));
 
       const aiMsgId = crypto.randomUUID();
       const aiMsg: ChatMessage = {
@@ -159,9 +181,28 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
 
       await setDoc(doc(db, 'users', user.uid, 'chats', MAIN_SESSION_ID, 'messages', aiMsgId), aiMsg);
       await updateDoc(sessionRef, { lastMessageAt: Date.now() });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat Error:", error);
       setIsOnline(false);
+      
+      const errorMessage = error.message || String(error);
+      const isLimitReached = errorMessage.includes("limit of 10 chats") || errorMessage.includes("429");
+      
+      if (isLimitReached) {
+        setChatCount(10);
+      }
+
+      const aiMsgId = crypto.randomUUID();
+      const aiMsg: ChatMessage = {
+        id: aiMsgId,
+        role: 'assistant',
+        content: isLimitReached 
+          ? `⚠️ **Daily Consultation Limit Reached**\n\nYou have reached your daily limit of 10 consultations today. To keep your healthcare safe and well-monitored, Dr. DawaLens is limited to 10 chats per day. Please return tomorrow, and I will be delighted to assist you further!` 
+          : `I encountered an issue connecting. Please try again. (${errorMessage})`,
+        timestamp: Date.now(),
+        provider: activeProvider
+      };
+      await setDoc(doc(db, 'users', user.uid, 'chats', MAIN_SESSION_ID, 'messages', aiMsgId), aiMsg);
     } finally {
       setIsLoading(false);
     }
@@ -443,8 +484,19 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
           {/* Input Bar Section */}
           <div className="bg-[#f0f2f5] border-t border-slate-200/80 shrink-0 safe-bottom z-20 pb-4">
             <div className="w-full">
+              {/* Daily Limit Status Indicator */}
+              <div className="px-5 pt-2 pb-1 flex justify-between items-center text-[11px] text-slate-500 font-bold tracking-wide select-none">
+                <span className="flex items-center gap-1 text-[#0f9d58]">
+                  <Sparkles size={11} className="animate-pulse" />
+                  HIGH THINKING AI ACTIVE
+                </span>
+                <span className="bg-slate-200/60 px-2 py-0.5 rounded-full font-mono">
+                  {10 - chatCount > 0 ? `${10 - chatCount}/10 chats left today` : "Limit reached today"}
+                </span>
+              </div>
+
               {/* Input Row */}
-              <div className="px-4 pt-3 flex items-center gap-3">
+              <div className="px-4 pt-1 flex items-center gap-3">
                 {/* Main Input Pill */}
                 <div className="flex-1">
                   <input
