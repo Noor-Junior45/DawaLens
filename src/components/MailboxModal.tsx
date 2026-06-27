@@ -106,13 +106,13 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
 
       if (type === 'expiry') {
         subject = `⚠️ Expiration Alert: Your prescription for ${sampleMed.name} is expiring soon`;
-        text = `Mediscan Alert: Your medicine ${sampleMed.name} (${sampleMed.dosage}) expires on ${sampleMed.expirationDate}. Please check your medicine vault.`;
+        text = `DawaLens AI Alert: Your medicine ${sampleMed.name} (${sampleMed.dosage}) expires on ${sampleMed.expirationDate}. Please check your medicine vault.`;
         html = `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e1e8ed; border-radius: 20px; background-color: #ffffff;">
             <div style="text-align: center; margin-bottom: 24px;">
               <div style="background-color: #fff8f6; color: #ff5232; font-size: 32px; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 12px; font-weight: bold;">⚠️</div>
               <h2 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Medicine Expiry Alert</h2>
-              <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">Mediscan Automated Alerts</p>
+              <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">DawaLens AI Automated Alerts</p>
             </div>
             <hr style="border: 0; border-top: 1px solid #e1e8ed; margin-bottom: 24px;" />
             <div style="background-color: #fafbfc; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
@@ -123,7 +123,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
               </p>
             </div>
             <p style="color: #24292e; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
-              This is an automated safety alert from DawaLens. Our smart tracking system detected that your stored stock of <strong>${sampleMed.name}</strong> is entering its critical expiration window. Please inspect the container to verify label integrity before administering.
+              This is an automated safety alert from DawaLens AI. Our smart tracking system detected that your stored stock of <strong>${sampleMed.name}</strong> is entering its critical expiration window. Please inspect the container to verify label integrity before administering.
             </p>
             <div style="text-align: center; margin-bottom: 24px;">
               <a href="https://ais-pre-6s2xsbjvqxz4mrntmcjjld-190562511229.asia-southeast1.run.app" style="background-color: #000000; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 14px; font-weight: bold; font-size: 14px; display: inline-block;">Manage My Vault</a>
@@ -135,13 +135,13 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
         `;
       } else {
         subject = `💊 Refill Required: ${sampleMed.name} is running extremely low`;
-        text = `Mediscan alert: Your medicine ${sampleMed.name} quantity is down to ${sampleMed.quantity || 3}. Please replenish your stocks soon.`;
+        text = `DawaLens AI alert: Your medicine ${sampleMed.name} quantity is down to ${sampleMed.quantity || 3}. Please replenish your stocks soon.`;
         html = `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e1e8ed; border-radius: 20px; background-color: #ffffff;">
             <div style="text-align: center; margin-bottom: 24px;">
               <div style="background-color: #f0f7ff; color: #0070f3; font-size: 32px; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 12px; font-weight: bold;">💊</div>
               <h2 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Low Stock Warning</h2>
-              <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">Mediscan Replenishment Engine</p>
+              <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">DawaLens AI Replenishment Engine</p>
             </div>
             <hr style="border: 0; border-top: 1px solid #e1e8ed; margin-bottom: 24px;" />
             <div style="background-color: #fafbfc; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
@@ -253,7 +253,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
             </div>
             <div>
               <h1 className="text-sm sm:text-base md:text-xl font-bold tracking-tight text-white flex flex-wrap items-center gap-1.5 sm:gap-2">
-                DawaLens Mailbox Outbox
+                DawaLens AI Mailbox Outbox
                 <span className="text-[8px] sm:text-[10px] px-2.5 py-1 bg-white/10 border border-white/5 rounded-full font-bold uppercase tracking-wider text-accent/85">
                   Trigger-Mail Connection
                 </span>

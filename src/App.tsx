@@ -179,7 +179,7 @@ export default function App() {
         if (expiringMeds.length > 0) {
           let lastNotifiedDate = null;
           try {
-            lastNotifiedDate = localStorage.getItem('mediscan_last_notified');
+            lastNotifiedDate = localStorage.getItem('dawalens_ai_last_notified');
           } catch (e) {
             console.warn('LocalStorage access denied:', e);
           }
@@ -187,11 +187,11 @@ export default function App() {
           if (lastNotifiedDate !== todayStr) {
             const medNames = expiringMeds.map(m => m.name).join(', ');
             try {
-              new Notification('Mediscan Alert', {
+              new Notification('DawaLens AI Alert', {
                 body: `You have ${expiringMeds.length} medicine(s) expiring soon: ${medNames}`,
                 icon: '/favicon.ico'
               });
-              localStorage.setItem('mediscan_last_notified', todayStr);
+              localStorage.setItem('dawalens_ai_last_notified', todayStr);
             } catch (e) {
               console.error('Failed to trigger notification:', e);
             }
@@ -228,17 +228,17 @@ export default function App() {
 
         // Loop expiring meds and trigger if not already sent today
         for (const m of expiringMeds) {
-          const storageKey = `mediscan_email_exp_${m.id}_${todayStr}`;
+          const storageKey = `dawalens_ai_email_exp_${m.id}_${todayStr}`;
           if (!localStorage.getItem(storageKey)) {
             try {
               const subject = `⚠️ Expiration Alert: ${m.name} is Expiring Soon`;
-              const text = `Mediscan alert: Your medicine ${m.name} (${m.dosage}) is expiring on ${m.expirationDate}.`;
+              const text = `DawaLens AI alert: Your medicine ${m.name} (${m.dosage}) is expiring on ${m.expirationDate}.`;
               const html = `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e1e8ed; border-radius: 20px; background-color: #ffffff;">
                   <div style="text-align: center; margin-bottom: 24px;">
                     <div style="background-color: #fff8f6; color: #ff5232; font-size: 32px; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 12px; font-weight: bold;">⚠️</div>
                     <h2 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Medicine Expiry Alert</h2>
-                    <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">Mediscan Automated Alerts</p>
+                    <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">DawaLens AI Automated Alerts</p>
                   </div>
                   <hr style="border: 0; border-top: 1px solid #e1e8ed; margin-bottom: 24px;" />
                   <div style="background-color: #fafbfc; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
@@ -247,7 +247,7 @@ export default function App() {
                     <p style="margin: 8px 0 0 0; color: #d32f2f; font-size: 14px; font-weight: bold;">📅 Expiration Date: ${m.expirationDate}</p>
                   </div>
                   <p style="color: #24292e; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
-                    This is an automated safety alert from your DawaLens vault. We detected that ${m.name} is entering its warning expiration threshold. Please check the medicine container's condition before use.
+                    This is an automated safety alert from your DawaLens AI vault. We detected that ${m.name} is entering its warning expiration threshold. Please check the medicine container's condition before use.
                   </p>
                 </div>
               `;
@@ -266,17 +266,17 @@ export default function App() {
 
         // Loop low quantity meds and trigger if not already sent today
         for (const m of lowQuantityMeds) {
-          const storageKey = `mediscan_email_qty_${m.id}_${todayStr}`;
+          const storageKey = `dawalens_ai_email_qty_${m.id}_${todayStr}`;
           if (!localStorage.getItem(storageKey)) {
             try {
               const subject = `💊 Low Stock Alert: Refill ${m.name}`;
-              const text = `Mediscan alert: Your medicine ${m.name} quantity is down to ${m.quantity}. Please replenish your stocks soon.`;
+              const text = `DawaLens AI alert: Your medicine ${m.name} quantity is down to ${m.quantity}. Please replenish your stocks soon.`;
               const html = `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e1e8ed; border-radius: 20px; background-color: #ffffff;">
                   <div style="text-align: center; margin-bottom: 24px;">
                     <div style="background-color: #f0f7ff; color: #0070f3; font-size: 32px; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 12px; font-weight: bold;">💊</div>
                     <h2 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Low Stock Warning</h2>
-                    <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">Mediscan Replenishment Engine</p>
+                    <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">DawaLens AI Replenishment Engine</p>
                   </div>
                   <hr style="border: 0; border-top: 1px solid #e1e8ed; margin-bottom: 24px;" />
                   <div style="background-color: #fafbfc; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
@@ -979,7 +979,7 @@ export default function App() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `mediscan_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `dawalens_ai_export_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -1114,7 +1114,7 @@ export default function App() {
               <Camera className="text-[#3c40c6]" size={42} />
             </div>
             <h1 className="text-5xl font-black tracking-tight text-[#3c40c6]">
-              Mediscan
+              DawaLens AI
             </h1>
             <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em]">
               Your AI Medicine Vault

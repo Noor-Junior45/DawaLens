@@ -7,7 +7,7 @@ export const CookieConsentBanner: React.FC = () => {
 
   useEffect(() => {
     try {
-      const consent = localStorage.getItem('mediscan_cookie_consent');
+      const consent = localStorage.getItem('dawalens_ai_cookie_consent');
       if (!consent) {
         setIsVisible(true);
       } else {
@@ -33,7 +33,7 @@ export const CookieConsentBanner: React.FC = () => {
 
   const handleAccept = () => {
     try {
-      localStorage.setItem('mediscan_cookie_consent', 'granted');
+      localStorage.setItem('dawalens_ai_cookie_consent', 'granted');
     } catch (e) {
       console.warn('Failed to save cookie consent to localStorage:', e);
     }
@@ -43,7 +43,7 @@ export const CookieConsentBanner: React.FC = () => {
 
   const handleDecline = () => {
     try {
-      localStorage.setItem('mediscan_cookie_consent', 'denied');
+      localStorage.setItem('dawalens_ai_cookie_consent', 'denied');
     } catch (e) {
       console.warn('Failed to save cookie consent to localStorage:', e);
     }
