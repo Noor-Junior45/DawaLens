@@ -191,8 +191,8 @@ async function startServer() {
         return res.status(400).json({ error: "userId is required" });
       }
       const today = new Date().toISOString().split('T')[0];
-      const countResult = getChatCount.get(userId, today) as { count: number } | undefined;
-      res.json({ count: countResult ? countResult.count : 0 });
+      const count = await getChatCount(userId, today);
+      res.json({ count });
     } catch (error: any) {
       res.status(500).json({ error: error.message || String(error) });
     }
@@ -204,8 +204,7 @@ async function startServer() {
       
       if (userId) {
         const today = new Date().toISOString().split('T')[0];
-        const countResult = getChatCount.get(userId, today) as { count: number } | undefined;
-        const currentCount = countResult ? countResult.count : 0;
+        const currentCount = await getChatCount(userId, today);
         
         if (currentCount >= 10) {
           return res.status(429).json({ 
@@ -213,7 +212,7 @@ async function startServer() {
           });
         }
         
-        incrementChatCount.run(userId, today);
+        await incrementChatCount(userId, today);
       }
       
       const responseText = await chatWithGeminiServer(messages);

@@ -47,7 +47,7 @@ CRITICAL INSTRUCTIONS:
 // Extraction Cache logic
 export async function getExtractionCache(imageHash: string) {
   try {
-    const row = getExtractionData.get(imageHash) as { data: string } | undefined;
+    const row = await getExtractionData(imageHash) as { data: string } | undefined;
     if (row) {
       return { found: true, data: JSON.parse(row.data) };
     }
@@ -59,7 +59,7 @@ export async function getExtractionCache(imageHash: string) {
 
 export async function saveExtractionCache(imageHash: string, data: any) {
   try {
-    setExtractionData.run(imageHash, JSON.stringify(data));
+    await setExtractionData(imageHash, JSON.stringify(data));
   } catch (err) {
     console.warn("Failed to set extraction cache:", err);
   }
@@ -67,7 +67,7 @@ export async function saveExtractionCache(imageHash: string, data: any) {
   if (data.success && data.medicine) {
     const { name, dosage, usageInstructions, schedule, form } = data.medicine;
     try {
-      setCachedMedicine.run(
+      await setCachedMedicine(
         (name || 'Unknown').toLowerCase().trim(), 
         dosage || 'N/A', 
         usageInstructions || '', 

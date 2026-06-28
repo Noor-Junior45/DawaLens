@@ -137,6 +137,18 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
+    match /server_chat_limits/{limitId} {
+      allow read, write: if true;
+    }
+
+    match /medicine_cache/{name} {
+      allow read, write: if true;
+    }
+
+    match /extraction_cache/{hash} {
+      allow read, write: if true;
+    }
+
     match /test/connection {
       allow read: if true;
     }

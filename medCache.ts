@@ -1,60 +1,97 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { initializeApp } from 'firebase/app';
+import { initializeFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import firebaseConfig from './firebase-applet-config.json';
 
-const dbPath = path.join(process.cwd(), 'med_cache.db');
-const db = new Database(dbPath);
+const app = initializeApp(firebaseConfig);
+const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: false,
+}, firebaseConfig.firestoreDatabaseId);
 
-// Initialize tables
-db.exec(`
-  CREATE TABLE IF NOT EXISTS medicine_cache (
-    name TEXT PRIMARY KEY,
-    dosage TEXT,
-    instructions TEXT,
-    schedule TEXT,
-    form TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+export async function getChatCount(userId: string, date: string): Promise<number> {
+  try {
+    const docRef = doc(db, 'server_chat_limits', `${userId}_${date}`);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data().count || 0;
+    }
+  } catch (error) {
+    console.error("Error in getChatCount:", error);
+  }
+  return 0;
+}
 
-  CREATE TABLE IF NOT EXISTS extraction_cache (
-    hash TEXT PRIMARY KEY,
-    data TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+export async function incrementChatCount(userId: string, date: string): Promise<void> {
+  try {
+    const docRef = doc(db, 'server_chat_limits', `${userId}_${date}`);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const currentCount = docSnap.data().count || 0;
+      await setDoc(docRef, { count: currentCount + 1, updated_at: new Date().toISOString() });
+    } else {
+      await setDoc(docRef, { count: 1, updated_at: new Date().toISOString() });
+    }
+  } catch (error) {
+    console.error("Error in incrementChatCount:", error);
+  }
+}
 
-  CREATE TABLE IF NOT EXISTS chat_limits (
-    userId TEXT,
-    date TEXT,
-    count INTEGER DEFAULT 0,
-    PRIMARY KEY (userId, date)
-  );
-`);
+export async function getCachedMedicine(name: string): Promise<any> {
+  try {
+    const docRef = doc(db, 'medicine_cache', name.toLowerCase().trim());
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+  } catch (error) {
+    console.error("Error in getCachedMedicine:", error);
+  }
+  return null;
+}
 
-export const getChatCount = db.prepare('SELECT count FROM chat_limits WHERE userId = ? AND date = ?');
-export const incrementChatCount = db.prepare(`
-  INSERT INTO chat_limits (userId, date, count)
-  VALUES (?, ?, 1)
-  ON CONFLICT(userId, date) DO UPDATE SET count = count + 1
-`);
+export async function setCachedMedicine(
+  name: string,
+  dosage: string,
+  instructions: string,
+  schedule: string,
+  form: string
+): Promise<void> {
+  try {
+    const docRef = doc(db, 'medicine_cache', name.toLowerCase().trim());
+    await setDoc(docRef, {
+      name,
+      dosage,
+      instructions,
+      schedule,
+      form,
+      updated_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Error in setCachedMedicine:", error);
+  }
+}
 
-export const getCachedMedicine = db.prepare('SELECT * FROM medicine_cache WHERE name = ?');
-export const setCachedMedicine = db.prepare(`
-  INSERT INTO medicine_cache (name, dosage, instructions, schedule, form)
-  VALUES (?, ?, ?, ?, ?)
-  ON CONFLICT(name) DO UPDATE SET
-    dosage = excluded.dosage,
-    instructions = excluded.instructions,
-    schedule = excluded.schedule,
-    form = excluded.form,
-    updated_at = CURRENT_TIMESTAMP
-`);
+export async function getExtractionData(hash: string): Promise<any> {
+  try {
+    const docRef = doc(db, 'extraction_cache', hash);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+  } catch (error) {
+    console.error("Error in getExtractionData:", error);
+  }
+  return null;
+}
 
-export const getExtractionData = db.prepare('SELECT data FROM extraction_cache WHERE hash = ?');
-export const setExtractionData = db.prepare(`
-  INSERT INTO extraction_cache (hash, data)
-  VALUES (?, ?)
-  ON CONFLICT(hash) DO UPDATE SET
-    data = excluded.data,
-    updated_at = CURRENT_TIMESTAMP
-`);
-
-export default db;
+export async function setExtractionData(hash: string, data: string): Promise<void> {
+  try {
+    const docRef = doc(db, 'extraction_cache', hash);
+    await setDoc(docRef, {
+      data,
+      updated_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Error in setExtractionData:", error);
+  }
+}
