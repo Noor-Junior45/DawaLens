@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { db, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType } from '../firebase';
 import { MEDICINE_FORM_ICONS, MEDICINE_FORM_LABELS } from '../constants';
 import { MedicineForm as MedicineFormType } from '../types';
+import { localImageStorage } from '../services/localImageStorage';
 
 interface MedicineFormProps {
   medicine?: Medicine | null;
@@ -34,7 +35,19 @@ export const MedicineForm: React.FC<MedicineFormProps> = ({
 
   useEffect(() => {
     if (medicine) {
-      setFormData(medicine);
+      if (medicine.imageUrl === 'local' && !medicine.capturedImage) {
+        localImageStorage.getImage(medicine.id).then((localImg) => {
+          if (localImg) {
+            setFormData({ ...medicine, capturedImage: localImg });
+          } else {
+            setFormData(medicine);
+          }
+        }).catch(() => {
+          setFormData(medicine);
+        });
+      } else {
+        setFormData(medicine);
+      }
     }
   }, [medicine]);
 

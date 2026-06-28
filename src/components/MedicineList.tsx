@@ -3,6 +3,7 @@ import { Medicine } from '../types';
 import { Calendar, Package, ChevronRight, AlertCircle, CheckCircle2, Pill, AlertTriangle, XCircle, Clock, Trash2, CheckSquare, Square, Minus, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MEDICINE_FORM_ICONS } from '../constants';
+import { LocalImage } from './LocalImage';
 
 interface MedicineListProps {
   medicines: Medicine[];
@@ -114,8 +115,20 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
     return diffDays < 0;
   };
 
-  const safeMedicines = medicines.filter(med => !checkIsExpiredOrEmpty(med));
-  const expiredOrEmptyMedicines = medicines.filter(med => checkIsExpiredOrEmpty(med));
+  const safeMedicines = medicines
+    .filter(med => !checkIsExpiredOrEmpty(med))
+    .sort((a, b) => {
+      if (a.liked && !b.liked) return -1;
+      if (!a.liked && b.liked) return 1;
+      return 0;
+    });
+  const expiredOrEmptyMedicines = medicines
+    .filter(med => checkIsExpiredOrEmpty(med))
+    .sort((a, b) => {
+      if (a.liked && !b.liked) return -1;
+      if (!a.liked && b.liked) return 1;
+      return 0;
+    });
 
   const renderMedicineItem = (med: Medicine, index: number) => {
     const status = getExpiryStatus(med.expirationDate);
@@ -195,12 +208,19 @@ export const MedicineList: React.FC<MedicineListProps> = ({ medicines, onEdit, o
       >
         {med.imageUrl && (
           <div className="absolute top-0 right-0 w-24 h-24 opacity-20 group-hover:opacity-30 transition-opacity pointer-events-none">
-            <img 
-              src={med.imageUrl} 
-              alt="" 
-              className="w-full h-full object-cover rounded-bl-3xl"
-              referrerPolicy="no-referrer"
-            />
+            {med.imageUrl === 'local' ? (
+              <LocalImage 
+                medicineId={med.id} 
+                className="w-full h-full object-cover rounded-bl-3xl" 
+              />
+            ) : (
+              <img 
+                src={med.imageUrl} 
+                alt="" 
+                className="w-full h-full object-cover rounded-bl-3xl"
+                referrerPolicy="no-referrer"
+              />
+            )}
           </div>
         )}
         

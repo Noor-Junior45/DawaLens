@@ -405,7 +405,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {deletedMedicines.map((med, idx) => {
                     const daysLeft = med.deletedAt ? Math.max(0, 15 - Math.floor((Date.now() - med.deletedAt) / (1000 * 60 * 60 * 24))) : 15;
                     return (
-                      <div key={med.id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-[#e3e2e0]">
+                      <div key={`deleted-med-${med.id || idx}-${idx}`} className="flex items-center justify-between bg-white p-2 rounded-lg border border-[#e3e2e0]">
                         <div className="flex flex-col min-w-0 flex-1">
                           <span className="text-[12px] font-bold text-[#1f1f1f] truncate">{med.name}</span>
                           <span className="text-[9px] text-slate-500 flex items-center gap-1 mt-0.5 font-medium">

@@ -23,6 +23,7 @@ import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { DoctorLogo } from './components/DoctorLogo';
 
 import { triggerLightHaptic, triggerSuccessHaptic } from './utils/haptics';
+import { localImageStorage } from './services/localImageStorage';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -485,55 +486,11 @@ export default function App() {
     try {
       const { capturedImage, ...firestoreData } = data;
       let imageUrl = data.imageUrl;
+      let localImageToSave: string | null = null;
 
-      // 1. Parallelize Image Upload (if needed) with Robust Task Management
       if (capturedImage && capturedImage.startsWith('data:image')) {
-        const imageId = crypto.randomUUID();
-        const storageRef = ref(storage, `medicines/${user.uid}/${imageId}.jpg`);
-        
-        // Re-compress for efficient cloud storage
-        const uploadBlob = await new Promise<Blob>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 800; 
-            let width = img.width;
-            let height = img.height;
-            if (width > MAX_WIDTH) {
-              height = Math.round((height * MAX_WIDTH) / width);
-              width = MAX_WIDTH;
-            }
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx?.drawImage(img, 0, 0, width, height);
-            canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.5); // Lower quality for reliability
-          };
-          img.src = capturedImage;
-        });
-
-        // Use Resumable upload for better network resilience
-        const uploadTask = uploadBytesResumable(storageRef, uploadBlob);
-        
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            uploadTask.cancel();
-            reject(new Error('Cloud Upload Timeout (60s)'));
-          }, 60000);
-
-          uploadTask.on('state_changed', 
-            null, 
-            (err) => {
-              clearTimeout(timeout);
-              reject(err);
-            }, 
-            async () => {
-              clearTimeout(timeout);
-              imageUrl = await getDownloadURL(storageRef);
-              resolve(true);
-            }
-          );
-        });
+        imageUrl = 'local';
+        localImageToSave = capturedImage;
       }
 
       const normalizedName = (firestoreData.name || '').toLowerCase().trim();
@@ -544,8 +501,10 @@ export default function App() {
       );
 
       const batch = writeBatch(db);
+      let targetId = '';
 
       if (existingMed) {
+        targetId = existingMed.id;
         const medRef = doc(db, 'medicines', existingMed.id);
         const currentQty = existingMed.quantity || 0;
         const addedQty = firestoreData.quantity || 0;
@@ -584,6 +543,7 @@ export default function App() {
           batch.delete(doc(db, 'medicines', editingMedicine.id));
         }
       } else if (editingMedicine && editingMedicine.id) {
+        targetId = editingMedicine.id;
         const medRef = doc(db, 'medicines', editingMedicine.id);
         const updateData: any = { 
           ...editingMedicine, 
@@ -615,6 +575,7 @@ export default function App() {
         });
       } else {
         const id = crypto.randomUUID();
+        targetId = id;
         const newMed: any = {
           id,
           name: firestoreData.name || 'Unknown',
@@ -647,6 +608,11 @@ export default function App() {
 
       // Commit all changes in ONE atomic operation
       await batch.commit();
+
+      if (localImageToSave && targetId) {
+        await localImageStorage.saveImage(targetId, localImageToSave);
+      }
+
       triggerSuccessHaptic();
 
       setIsFormOpen(false);
@@ -664,7 +630,7 @@ export default function App() {
     if (!user) return;
     try {
       const medToDelete = medicines.find(m => m.id === id);
-      if (medToDelete?.imageUrl) {
+      if (medToDelete?.imageUrl && medToDelete.imageUrl !== 'local') {
         try {
           const imageRef = ref(storage, medToDelete.imageUrl);
           await deleteObject(imageRef);
@@ -1013,6 +979,9 @@ export default function App() {
       batch.delete(doc(db, 'medicines', id));
       
       await batch.commit();
+
+      // Clean up local image storage
+      await localImageStorage.deleteImage(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'medicines');
     }
