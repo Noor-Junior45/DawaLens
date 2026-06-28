@@ -314,9 +314,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
             
             <div className="flex items-center gap-3">
               {/* Keep only that person[svg] */}
-              <div className="relative shrink-0 flex items-center justify-center">
-                <DoctorLogo className="w-10 h-10 text-white" />
-                <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-[#0f9d58] rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-3xs">
+                <DoctorLogo className="w-6 h-6 text-white" />
               </div>
               
               <div className="flex flex-col">
@@ -403,7 +402,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
                           )}
                         </div>
                       ) : (
-                        <DoctorLogo className="w-9 h-9 text-[#0f9d58] shrink-0" />
+                        <div className="w-9 h-9 rounded-full bg-[#0f9d58]/10 flex items-center justify-center text-[#0f9d58] shrink-0 border border-[#0f9d58]/20 shadow-3xs">
+                          <DoctorLogo className="w-6 h-6 text-[#0f9d58]" />
+                        </div>
                       )}
 
                       {/* Flex column for Chat Bubble and action buttons below */}
@@ -467,7 +468,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
 
               {isLoading && (
                 <div className="flex justify-start items-start gap-2.5">
-                  <DoctorLogo className="w-9 h-9 text-[#0f9d58] shrink-0" />
+                  <div className="w-9 h-9 rounded-full bg-[#0f9d58]/10 flex items-center justify-center text-[#0f9d58] shrink-0 border border-[#0f9d58]/20 shadow-3xs">
+                    <DoctorLogo className="w-6 h-6 text-[#0f9d58]" />
+                  </div>
                   <div className="bg-white px-4 py-3 rounded-[18px] rounded-tl-none shadow-3xs border border-slate-100">
                     <div className="flex gap-1.5 py-1">
                       <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2 }} className="w-2 h-2 bg-[#0f9d58] rounded-full" />

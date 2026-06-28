@@ -17,7 +17,6 @@ import {
   ref, uploadBytes, getDownloadURL, deleteObject, serverTimestamp, uploadBytesResumable
 } from './firebase';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { AdBanner } from './components/AdBanner';
 import { checkDrugInteractions, InteractionResult } from './services/geminiService';
 
 import { CookieConsentBanner } from './components/CookieConsentBanner';
@@ -1358,7 +1357,6 @@ export default function App() {
           alertThreshold={alertThreshold}
           onToggleLike={handleToggleLike}
         />
-        <AdBanner slot="7890123456" />
       </main>
 
       {/* Floating Action Bar */}
