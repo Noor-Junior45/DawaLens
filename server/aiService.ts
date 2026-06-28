@@ -5,11 +5,23 @@ const interactionCache = new Map<string, any>();
 
 // Initialize Gemini safely with telemetry header
 const getAvailableKeys = () => {
-  const keys = [
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_API_KEY_2,
-    process.env.GEMINI_API_KEY_3
-  ].filter((key): key is string => typeof key === 'string' && key.trim() !== '');
+  const rawKeys = [
+    { name: 'GEMINI_API_KEY', value: process.env.GEMINI_API_KEY },
+    { name: 'GEMINI_API_KEY_2', value: process.env.GEMINI_API_KEY_2 },
+    { name: 'GEMINI_API_KEY_3', value: process.env.GEMINI_API_KEY_3 }
+  ];
+  
+  const keys: string[] = [];
+  rawKeys.forEach((k) => {
+    if (k.value && k.value.trim() !== '' && !k.value.includes('MY_GEMINI_API_KEY') && k.value.trim() !== 'MY_GEMINI_API_KEY_2' && k.value.trim() !== 'MY_GEMINI_API_KEY_3') {
+      const val = k.value.trim();
+      keys.push(val);
+      const masked = val.length > 10 ? val.substring(0, 6) + '...' + val.slice(-4) : '***';
+      console.log(`[GEMINI KEYS] Successfully detected and loaded secret "${k.name}" (Masked: ${masked})`);
+    } else {
+      console.log(`[GEMINI KEYS] Secret "${k.name}" is empty or has a default placeholder.`);
+    }
+  });
   return keys;
 };
 

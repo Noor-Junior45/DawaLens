@@ -221,6 +221,9 @@ export async function extractMedicineData(base64Image: string): Promise<Extracti
     return await response.json();
   } catch (error: any) {
     console.warn("Extraction server error, trying client fallback:", error);
+    if (!getClientApiKey()) {
+      return { success: false, errorMessage: error.message || String(error) };
+    }
     try {
       return await extractMedicineDataClient(base64Image);
     } catch (fallbackError: any) {
@@ -255,8 +258,11 @@ export async function checkDrugInteractions(medicines: { name: string; dosage: s
     }
     
     return await response.json();
-  } catch (error) {
+  } catch (error: any) {
     console.warn('Interaction server check failed, trying client fallback:', error);
+    if (!getClientApiKey()) {
+      throw error;
+    }
     try {
       return await checkDrugInteractionsClient(medicines);
     } catch (fallbackError) {
@@ -298,6 +304,9 @@ export async function chatWithGemini(messages: ChatMessage[], userId?: string): 
     return data.responseText;
   } catch (error: any) {
     console.warn('Gemini Server Chat failed, trying client-side fallback:', error);
+    if (!getClientApiKey()) {
+      throw error;
+    }
     try {
       return await chatWithGeminiClient(messages);
     } catch (fallbackError: any) {
