@@ -9,6 +9,8 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
       .then((reg) => {
         console.log('PWA Service Worker registered successfully:', reg.scope);
+        // Explicitly check for updates on page reload to avoid stale content
+        reg.update();
       })
       .catch((err) => {
         console.warn('PWA Service Worker registration warning (expected in sandboxed frames):', err);
