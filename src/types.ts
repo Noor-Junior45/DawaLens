@@ -48,4 +48,4 @@ export interface ChatSession {
   provider?: AIProvider;
 }
 
-export type AIProvider = 'gemini' | 'deepseek';
+export type AIProvider = 'gemini';

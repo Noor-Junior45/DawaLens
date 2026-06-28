@@ -731,11 +731,19 @@ export default function App() {
 
   const handleToggleLike = async (medicine: Medicine) => {
     if (!user) return;
+    const originalLiked = !!medicine.liked;
+    const newLiked = !originalLiked;
+
+    // 1. Optimistic Update - immediately toggle state for instant UI response
+    setMedicines(prev => prev.map(m => m.id === medicine.id ? { ...m, liked: newLiked } : m));
+    triggerSuccessHaptic();
+
     try {
       const medRef = doc(db, 'medicines', medicine.id);
-      await setDoc(medRef, { liked: !medicine.liked }, { merge: true });
-      triggerSuccessHaptic();
+      await updateDoc(medRef, { liked: newLiked });
     } catch (error) {
+      // 2. Rollback state if the backend save fails (e.g. offline/permission error)
+      setMedicines(prev => prev.map(m => m.id === medicine.id ? { ...m, liked: originalLiked } : m));
       handleFirestoreError(error, OperationType.UPDATE, 'medicines');
     }
   };

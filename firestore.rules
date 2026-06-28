@@ -72,7 +72,7 @@ service cloud.firestore {
              data.title is string && data.title.size() < 500 &&
              data.createdAt is number &&
              data.lastMessageAt is number &&
-             (!('provider' in data) || data.provider in ['gemini', 'deepseek']);
+             (!('provider' in data) || data.provider in ['gemini']);
     }
 
     function isValidChatMessage(data) {
@@ -81,7 +81,7 @@ service cloud.firestore {
              data.role in ['user', 'assistant', 'system'] &&
              data.content is string && data.content.size() < 10000 &&
              data.timestamp is number &&
-             (!('provider' in data) || data.provider in ['gemini', 'deepseek']);
+             (!('provider' in data) || data.provider in ['gemini']);
     }
 
     function isValidMail(data) {

@@ -68,7 +68,7 @@
         "title": { "type": "string" },
         "createdAt": { "type": "number" },
         "lastMessageAt": { "type": "number" },
-        "provider": { "type": "string", "enum": ["gemini", "deepseek"] }
+        "provider": { "type": "string", "enum": ["gemini"] }
       },
       "required": ["id", "userId", "title", "createdAt", "lastMessageAt"]
     },
@@ -81,7 +81,7 @@
         "role": { "type": "string", "enum": ["user", "assistant", "system"] },
         "content": { "type": "string" },
         "timestamp": { "type": "number" },
-        "provider": { "type": "string", "enum": ["gemini", "deepseek"] }
+        "provider": { "type": "string", "enum": ["gemini"] }
       },
       "required": ["id", "role", "content", "timestamp"]
     },

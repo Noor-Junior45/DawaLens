@@ -1,7 +1,7 @@
 import { MedicineForm, ChatMessage } from "../types";
 import { GoogleGenAI } from "@google/genai";
 
-export const isProviderKeyMissing = (provider: 'gemini' | 'deepseek') => {
+export const isProviderKeyMissing = (provider: 'gemini' = 'gemini') => {
   return !getClientApiKey();
 };
 
@@ -256,7 +256,7 @@ export async function checkDrugInteractions(medicines: { name: string; dosage: s
   }
 }
 
-export async function chatWithAI(messages: ChatMessage[], provider: 'gemini' | 'deepseek' = 'gemini', userId?: string): Promise<string> {
+export async function chatWithAI(messages: ChatMessage[], provider: 'gemini' = 'gemini', userId?: string): Promise<string> {
   return chatWithGemini(messages, userId);
 }
 
