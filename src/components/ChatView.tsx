@@ -183,7 +183,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
       await updateDoc(sessionRef, { lastMessageAt: Date.now() });
     } catch (error: any) {
       console.error("Chat Error:", error);
-      setIsOnline(false);
       
       const errorMessage = error.message || String(error);
       const errLower = errorMessage.toLowerCase();
@@ -195,13 +194,26 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
         errLower.includes("billing");
       const isLimitReached = (errorMessage.includes("limit of 10 chats") || errorMessage.includes("429")) && !isSpendCapExceeded;
       
+      if (isSpendCapExceeded || isLimitReached) {
+        setIsOnline(true);
+      } else {
+        setIsOnline(false);
+      }
+
       if (isLimitReached) {
         setChatCount(10);
       }
 
       let content = `I encountered an issue connecting. Please try again. (${errorMessage})`;
       if (isSpendCapExceeded) {
-        content = `⚠️ **Gemini API Monthly Spend Cap Exceeded**\n\nThe project has exceeded its monthly spending cap in Google AI Studio. Please visit [Google AI Studio Billing](https://ai.studio/spend) to manage your spending cap or check back later.`;
+        content = `⚠️ **Gemini AI Service Temporarily Paused**
+
+The AI Pharmacist is currently online, but the project's **Google AI Studio Spending Cap** or monthly quota has been reached.
+
+If you are the developer/owner of this project, you can easily resolve this by managing your billing plan and spending limits in Google AI Studio:
+👉 **[Open Google AI Studio Spend Settings](https://ai.studio/spend)**
+
+Otherwise, please try again once the billing plan or quota is refreshed. Thank you for your patience!`;
       } else if (isLimitReached) {
         content = `⚠️ **Daily Consultation Limit Reached**\n\nYou have reached your daily limit of 10 consultations today. To keep your healthcare safe and well-monitored, Dr. DawaLens is limited to 10 chats per day. Please return tomorrow, and I will be delighted to assist you further!`;
       }
@@ -427,8 +439,20 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
                             ? 'bg-[#e2f7cb] text-[#1f1f1f] rounded-[18px] rounded-tr-none' 
                             : 'bg-white text-[#1f1f1f] rounded-[18px] rounded-tl-none border border-slate-100'
                         }`}>
-                          <div className="prose prose-sm max-w-none text-[14.5px] leading-relaxed break-words text-[#1f1f1f]">
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          <div className="prose prose-sm max-w-none text-[14.5px] leading-relaxed break-words text-[#1f1f1f] [&_a]:text-[#0f9d58] [&_a]:underline [&_a]:font-bold hover:[&_a]:text-[#0d854a]">
+                            <ReactMarkdown
+                              components={{
+                                a: ({ node, ...props }) => (
+                                  <a 
+                                    {...props} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                  />
+                                )
+                              }}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
                           </div>
                           
                           {/* Timestamp & Tick */}
