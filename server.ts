@@ -19,13 +19,17 @@ let transporterInstance: any = null;
 function getTransporter() {
   if (transporterInstance) return transporterInstance;
   
-  const user = "noorpos.alerts@gmail.com";
-  const pass = process.env.GMAIL_APP_PASSWORD;
+  const rawUser = process.env.GMAIL_USER || process.env.EMAIL_USER || process.env.GMAIL_USERNAME || "noorpos.alerts@gmail.com";
+  const user = rawUser.replace(/['"]+/g, "").trim();
   
-  if (!pass || pass.trim() === "" || pass === "YOUR_GMAIL_APP_PASSWORD") {
+  const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS || process.env.APP_PASSWORD;
+  
+  if (!rawPass || rawPass.trim() === "" || rawPass === "YOUR_GMAIL_APP_PASSWORD") {
     console.warn("[NODEMAILER] GMAIL_APP_PASSWORD is not configured in your environment variables. Using simulated fallback mode.");
     return null;
   }
+  
+  const cleanPass = rawPass.replace(/['"]+/g, "").replace(/\s+/g, "").trim();
   
   transporterInstance = nodemailer.createTransport({
     host: "smtp.gmail.com",
@@ -33,7 +37,10 @@ function getTransporter() {
     secure: true, // true for port 465 (SSL)
     auth: {
       user: user,
-      pass: pass
+      pass: cleanPass
+    },
+    tls: {
+      rejectUnauthorized: false
     }
   });
   
@@ -158,8 +165,10 @@ async function startServer() {
         return res.status(400).json({ error: "Missing required fields 'to' or 'subject'" });
       }
 
-      const pass = process.env.GMAIL_APP_PASSWORD;
-      const fromEmail = "noorpos.alerts@gmail.com";
+      const rawUser = process.env.GMAIL_USER || process.env.EMAIL_USER || process.env.GMAIL_USERNAME || "noorpos.alerts@gmail.com";
+      const fromEmail = rawUser.replace(/['"]+/g, "").trim();
+
+      const pass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS || process.env.APP_PASSWORD;
 
       if (!pass || pass.trim() === "" || pass === "YOUR_GMAIL_APP_PASSWORD") {
         console.warn(`[EMAIL NODEMAILER FALLBACK] Simulated sending email to ${to} since GMAIL_APP_PASSWORD is not set.`);
@@ -188,21 +197,26 @@ async function startServer() {
         { port: 465, secure: true }
       ];
 
+      const cleanPass = pass.replace(/['"]+/g, "").replace(/\s+/g, "").trim();
+
       for (let attempt = 0; attempt < configs.length; attempt++) {
         const config = configs[attempt];
         try {
-          console.log(`[EMAIL SEND] Attempt ${attempt + 1}: trying smtp.gmail.com:${config.port} (secure: ${config.secure})...`);
+          console.log(`[EMAIL SEND] Attempt ${attempt + 1}: trying smtp.gmail.com:${config.port} with user: ${fromEmail}...`);
           const transporter = nodemailer.createTransport({
             host: "smtp.gmail.com",
             port: config.port,
             secure: config.secure,
             auth: {
               user: fromEmail,
-              pass: pass
+              pass: cleanPass
             },
             connectionTimeout: 10000,
             greetingTimeout: 10000,
-            socketTimeout: 15000
+            socketTimeout: 15000,
+            tls: {
+              rejectUnauthorized: false
+            }
           });
 
           await transporter.sendMail(mailOptions);
