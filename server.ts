@@ -16,16 +16,72 @@ import { getChatCount, incrementChatCount } from "./medCache";
 let transporterInstance: any = null;
 
 function getGmailCredentials() {
-  // Use the working credentials explicitly provided by the user to guarantee success.
-  const user = "noorpos.alerts@gmail.com";
-  const cleanPass = "wrieavyseptoednt"; // "wrie avys epto ednt" with spaces removed
+  const userKeys = [
+    "GMAIL_USER",
+    "GAMIL_USER",
+    "EMAIL_USER",
+    "GMAIL_USERNAME",
+    "GAMIL_USERNAME",
+    "EMAIL_USERNAME",
+    "SENDER_EMAIL"
+  ];
   
+  const passKeys = [
+    "GMAIL_APP_PASSWORD",
+    "GAMIL_APP_PASSWORD",
+    "GMAIL_PASSWORD",
+    "GAMIL_PASSWORD",
+    "EMAIL_PASSWORD",
+    "GMAIL_APP_PASS",
+    "GAMIL_APP_PASS",
+    "GMAIL_PASS",
+    "GAMIL_PASS",
+    "EMAIL_PASS",
+    "APP_PASSWORD"
+  ];
+
+  let user = "";
+  let resolvedUserKey = "NONE";
+  for (const key of userKeys) {
+    if (process.env[key]) {
+      const val = process.env[key]!.trim();
+      if (val && val !== "YOUR_GMAIL_EMAIL" && val !== "your_email@gmail.com") {
+        user = val.replace(/['"]+/g, "").trim();
+        resolvedUserKey = key;
+        break;
+      }
+    }
+  }
+
+  let cleanPass = "";
+  let resolvedPassKey = "NONE";
+  for (const key of passKeys) {
+    if (process.env[key]) {
+      const val = process.env[key]!.trim();
+      if (val && val !== "YOUR_GMAIL_APP_PASSWORD" && val !== "your_app_password_here") {
+        cleanPass = val.replace(/['"]+/g, "").replace(/\s+/g, "").trim();
+        resolvedPassKey = key;
+        break;
+      }
+    }
+  }
+
+  // Fall back to working user credentials if not configured in the environment
+  if (!user) {
+    user = "noorpos.alerts@gmail.com";
+    resolvedUserKey = "HARDCODED_FALLBACK";
+  }
+  if (!cleanPass) {
+    cleanPass = "wrieavyseptoednt";
+    resolvedPassKey = "HARDCODED_FALLBACK";
+  }
+
   return { 
     user, 
     cleanPass, 
-    resolvedUserKey: "USER_EXPLICIT_PRIMARY", 
-    resolvedPassKey: "USER_EXPLICIT_PRIMARY", 
-    originalPass: "wrie avys epto ednt" 
+    resolvedUserKey, 
+    resolvedPassKey, 
+    originalPass: cleanPass 
   };
 }
 
