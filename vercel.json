@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/terms",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/google(.*).html",
+      "destination": "/api/index.ts"
+    }
+  ]
+}

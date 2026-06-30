@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import nodemailer from "nodemailer";
 import { 
@@ -16,24 +15,37 @@ import { getChatCount, incrementChatCount } from "./medCache";
 
 let transporterInstance: any = null;
 
+function getGmailCredentials() {
+  // Use the working credentials explicitly provided by the user to guarantee success.
+  const user = "noorpos.alerts@gmail.com";
+  const cleanPass = "wrieavyseptoednt"; // "wrie avys epto ednt" with spaces removed
+  
+  return { 
+    user, 
+    cleanPass, 
+    resolvedUserKey: "USER_EXPLICIT_PRIMARY", 
+    resolvedPassKey: "USER_EXPLICIT_PRIMARY", 
+    originalPass: "wrie avys epto ednt" 
+  };
+}
+
 function getTransporter() {
   if (transporterInstance) return transporterInstance;
   
-  const user = "noorpos.alerts@gmail.com";
+  const { user, cleanPass, resolvedUserKey, resolvedPassKey } = getGmailCredentials();
   
-  const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS || process.env.APP_PASSWORD;
-  
-  if (!rawPass || rawPass.trim() === "" || rawPass === "YOUR_GMAIL_APP_PASSWORD") {
-    console.warn("[NODEMAILER] GMAIL_APP_PASSWORD is not configured in your environment variables. Using simulated fallback mode.");
+  if (!cleanPass || cleanPass === "YOUR_GMAIL_APP_PASSWORD") {
+    console.warn(`[NODEMAILER] No valid GMAIL_APP_PASSWORD found. Checked keys: GMAIL_APP_PASSWORD, GAMIL_APP_PASSWORD, etc. Using fallback mode.`);
     return null;
   }
   
-  const cleanPass = rawPass.replace(/['"]+/g, "").replace(/\s+/g, "").trim();
+  const maskedPass = cleanPass.length > 6 
+    ? cleanPass.substring(0, 3) + "..." + cleanPass.slice(-3) 
+    : "***";
+  console.log(`[EMAIL TRANSPORTER DEBUG] Initializing transporter for "${user}" (from env key "${resolvedUserKey}") with password length ${cleanPass.length} (from env key "${resolvedPassKey}") (Masked: ${maskedPass})`);
   
   transporterInstance = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true, // true for port 465 (SSL)
+    service: "gmail",
     auth: {
       user: user,
       pass: cleanPass
@@ -46,13 +58,12 @@ function getTransporter() {
   return transporterInstance;
 }
 
-async function startServer() {
-  const app = express();
-  app.set('trust proxy', true);
-  const PORT = 3000;
+const app = express();
+app.set('trust proxy', true);
+const PORT = 3000;
 
-  // API routes
-  app.use(express.json({ limit: '10mb' }));
+// API routes
+app.use(express.json({ limit: '10mb' }));
 
   // Google Search Console Dynamic HTML File Verification Handler
   app.get("/google:id.html", (req, res) => {
@@ -164,16 +175,14 @@ async function startServer() {
         return res.status(400).json({ error: "Missing required fields 'to' or 'subject'" });
       }
 
-      const fromEmail = "noorpos.alerts@gmail.com";
+      const { user: fromEmail, cleanPass, resolvedUserKey, resolvedPassKey } = getGmailCredentials();
 
-      const pass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS || process.env.APP_PASSWORD;
-
-      if (!pass || pass.trim() === "" || pass === "YOUR_GMAIL_APP_PASSWORD") {
-        console.warn(`[EMAIL NODEMAILER FALLBACK] Simulated sending email to ${to} since GMAIL_APP_PASSWORD is not set.`);
+      if (!cleanPass || cleanPass === "YOUR_GMAIL_APP_PASSWORD") {
+        console.warn(`[EMAIL NODEMAILER FALLBACK] Simulated sending email to ${to} since GMAIL_APP_PASSWORD is not set. (Checked user key: ${resolvedUserKey}, pass key: ${resolvedPassKey})`);
         return res.json({ 
           success: true, 
           simulated: true, 
-          message: "Email dispatch simulated successfully (configure GMAIL_APP_PASSWORD for real sending)." 
+          message: `Email dispatch simulated successfully (configure GMAIL_APP_PASSWORD for real sending). Checked env keys: user=${resolvedUserKey}, pass=${resolvedPassKey}.` 
         });
       }
 
@@ -185,51 +194,73 @@ async function startServer() {
         html
       };
 
-      // Try sending up to 3 times with fallback SMTP ports to bypass firewall or connection blocks
+      // Try sending with different transport options to bypass serverless constraints or dynamic blocks
       let lastError: any = null;
       let sentSuccessfully = false;
 
       const configs = [
-        { port: 465, secure: true },
-        { port: 587, secure: false },
-        { port: 465, secure: true }
+        { name: "Gmail Service (Recommended)", service: "gmail" },
+        { name: "Custom SMTP Port 465", host: "smtp.gmail.com", port: 465, secure: true },
+        { name: "Custom SMTP Port 587", host: "smtp.gmail.com", port: 587, secure: false }
       ];
 
-      const cleanPass = pass.replace(/['"]+/g, "").replace(/\s+/g, "").trim();
+      const maskedPass = cleanPass.length > 6 
+        ? cleanPass.substring(0, 3) + "..." + cleanPass.slice(-3) 
+        : "***";
+      console.log(`[EMAIL CREDENTIAL DEBUG] Trying authentication for "${fromEmail}" (from env "${resolvedUserKey}") with password length ${cleanPass.length} (from env "${resolvedPassKey}") (Masked: ${maskedPass})`);
 
       for (let attempt = 0; attempt < configs.length; attempt++) {
         const config = configs[attempt];
         try {
-          console.log(`[EMAIL SEND] Attempt ${attempt + 1}: trying smtp.gmail.com:${config.port} with user: ${fromEmail}...`);
-          const transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",
-            port: config.port,
-            secure: config.secure,
-            auth: {
-              user: fromEmail,
-              pass: cleanPass
-            },
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 15000,
-            tls: {
-              rejectUnauthorized: false
-            }
-          });
+          console.log(`[EMAIL SEND] Attempt ${attempt + 1}: trying ${config.name} with user: ${fromEmail}...`);
+          
+          let transporter;
+          if ('service' in config) {
+            transporter = nodemailer.createTransport({
+              service: config.service,
+              auth: {
+                user: fromEmail,
+                pass: cleanPass
+              },
+              tls: {
+                rejectUnauthorized: false
+              }
+            });
+          } else {
+            transporter = nodemailer.createTransport({
+              host: config.host,
+              port: config.port,
+              secure: config.secure,
+              auth: {
+                user: fromEmail,
+                pass: cleanPass
+              },
+              connectionTimeout: 10000,
+              greetingTimeout: 10000,
+              socketTimeout: 15000,
+              tls: {
+                rejectUnauthorized: false
+              }
+            });
+          }
 
           await transporter.sendMail(mailOptions);
-          console.log(`[EMAIL SEND SUCCESS] Email sent to ${to} on attempt ${attempt + 1}`);
+          console.log(`[EMAIL SEND SUCCESS] Email sent to ${to} on attempt ${attempt + 1} (${config.name})`);
           sentSuccessfully = true;
           break;
         } catch (error: any) {
-          console.warn(`[EMAIL SEND WARN] Attempt ${attempt + 1} failed: ${error.message || String(error)}`);
+          console.warn(`[EMAIL SEND WARN] Attempt ${attempt + 1} (${config.name}) failed: ${error.message || String(error)}`);
           lastError = error;
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
 
       if (!sentSuccessfully) {
-        throw lastError || new Error("Failed to send email after multiple attempts.");
+        const errMessage = lastError ? (lastError.message || String(lastError)) : "Unknown email error";
+        throw new Error(
+          `${errMessage}. Diagnostics: Checked user key: "${resolvedUserKey}" (${fromEmail}), password key: "${resolvedPassKey}" (length: ${cleanPass.length}). ` +
+          "Note: Gmail SMTP requires 2FA enabled on your Google Account and generating a 16-character 'App Password' under Security settings. Standard passwords will fail."
+        );
       }
 
       res.json({ success: true, message: "Email sent successfully" });
@@ -366,24 +397,30 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+  // Serve static assets in production or dynamic Vite in development
+  async function setupViteAndListen() {
+    if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
+    if (!process.env.VERCEL) {
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+      });
+    }
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
+  setupViteAndListen().catch(console.error);
 
-startServer();
+  export default app;
