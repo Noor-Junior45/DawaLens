@@ -1,6 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import nodemailer from "nodemailer";
 import { 
   getExtractionCache, 
   saveExtractionCache, 
@@ -11,6 +12,32 @@ import {
   chatWithGeminiServer 
 } from "./server/aiService";
 import { getChatCount, incrementChatCount } from "./medCache";
+
+let transporterInstance: any = null;
+
+function getTransporter() {
+  if (transporterInstance) return transporterInstance;
+  
+  const user = process.env.GMAIL_USER || "noorpos.alerts@gmail.com";
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  
+  if (!pass || pass.trim() === "" || pass === "YOUR_GMAIL_APP_PASSWORD") {
+    console.warn("[NODEMAILER] GMAIL_APP_PASSWORD is not configured in your environment variables. Using simulated fallback mode.");
+    return null;
+  }
+  
+  transporterInstance = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true, // true for port 465 (SSL)
+    auth: {
+      user: user,
+      pass: pass
+    }
+  });
+  
+  return transporterInstance;
+}
 
 async function startServer() {
   const app = express();
@@ -61,7 +88,7 @@ async function startServer() {
 
   <h2>3. Contact Us</h2>
   <p>If you have any questions, feedback, or concerns regarding your privacy or data protection practices, feel free to contact us at:</p>
-  <p>Email: <a href="mailto:mdhassan1738@gmail.com">mdhassan1738@gmail.com</a></p>
+  <p>Email: <a href="mailto:noorpos.alerts@gmail.com">noorpos.alerts@gmail.com</a></p>
   
   <footer>
     <p>&copy; 2026 DawaLens AI. All rights reserved. Host: https://noorpos.in</p>
@@ -108,7 +135,7 @@ async function startServer() {
 
   <h2>6. Governing Law & Contact</h2>
   <p>For any questions or legal inquiries, please contact us at:</p>
-  <p>Email: <a href="mailto:mdhassan1738@gmail.com">mdhassan1738@gmail.com</a></p>
+  <p>Email: <a href="mailto:noorpos.alerts@gmail.com">noorpos.alerts@gmail.com</a></p>
 
   <footer>
     <p>&copy; 2026 DawaLens AI. All rights reserved. Host: https://noorpos.in</p>
@@ -119,6 +146,43 @@ async function startServer() {
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", message: "DawaLens AI Server is running" });
+  });
+
+  // Mail Sending Route (Nodemailer) using noorpos.alerts@gmail.com
+  app.post("/api/send-email", async (req, res) => {
+    try {
+      const { to, subject, text, html } = req.body;
+      if (!to || !subject) {
+        return res.status(400).json({ error: "Missing required fields 'to' or 'subject'" });
+      }
+
+      const transporter = getTransporter();
+      const fromEmail = process.env.GMAIL_USER || "noorpos.alerts@gmail.com";
+
+      if (!transporter) {
+        console.warn(`[EMAIL NODEMAILER FALLBACK] Simulated sending email to ${to} since GMAIL_APP_PASSWORD is not set.`);
+        return res.json({ 
+          success: true, 
+          simulated: true, 
+          message: "Email dispatch simulated successfully (configure GMAIL_APP_PASSWORD for real sending)." 
+        });
+      }
+
+      const mailOptions = {
+        from: `"DawaLens AI Alert" <${fromEmail}>`,
+        to,
+        subject,
+        text,
+        html
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`[EMAIL SEND SUCCESS] Email sent to ${to}`);
+      res.json({ success: true, message: "Email sent successfully" });
+    } catch (error: any) {
+      console.error("[EMAIL SEND ERROR]", error);
+      res.status(500).json({ error: error.message || String(error) });
+    }
   });
 
   // Extraction Cache Routes
@@ -200,7 +264,7 @@ async function startServer() {
 
   app.post("/api/ai/chat", async (req, res) => {
     try {
-      const { messages, userId } = req.body;
+      const { messages, userId, medicines } = req.body;
       
       if (userId) {
         const today = new Date().toISOString().split('T')[0];
@@ -213,7 +277,7 @@ async function startServer() {
         }
       }
       
-      const responseText = await chatWithGeminiServer(messages);
+      const responseText = await chatWithGeminiServer(messages, userId, medicines);
       
       if (userId) {
         const today = new Date().toISOString().split('T')[0];

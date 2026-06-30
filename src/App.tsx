@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Camera, Download, Upload, Info, Settings, Search, X, History, Trash2, ShieldAlert, CheckCircle2, Bot, Stethoscope, Mail } from 'lucide-react';
+import { Plus, Camera, Download, Upload, Info, Settings, Search, X, History, Trash2, ShieldAlert, CheckCircle2, Bot, Stethoscope, Mail, Pill, BookOpen, Shield, Scale } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import { Medicine } from './types';
@@ -13,7 +13,7 @@ import { extractMedicineData } from './services/geminiService';
 import { 
   auth, db, storage, googleProvider, signInWithPopup, signOut, onAuthStateChanged, 
   collection, doc, setDoc, addDoc, deleteDoc, updateDoc, writeBatch, onSnapshot, query, where, orderBy, getDoc, getDocs, User,
-  handleFirestoreError, OperationType, deleteField, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  handleFirestoreError, OperationType, deleteField, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail,
   ref, uploadBytes, getDownloadURL, deleteObject, serverTimestamp, uploadBytesResumable
 } from './firebase';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -24,6 +24,7 @@ import { DoctorLogo } from './components/DoctorLogo';
 
 import { triggerLightHaptic, triggerSuccessHaptic } from './utils/haptics';
 import { localImageStorage } from './services/localImageStorage';
+import { sendEmailAlert } from './services/emailService';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -50,6 +51,9 @@ export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [isLikedOnly, setIsLikedOnly] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [passwordResetEmailSent, setPasswordResetEmailSent] = useState<string | null>(null);
+  const [activeFooterModal, setActiveFooterModal] = useState<'guide' | 'privacy' | 'terms' | null>(null);
+  const [openedFromSettings, setOpenedFromSettings] = useState<boolean>(false);
 
   // Google Site Verification Dynamic Header Injection
   useEffect(() => {
@@ -226,36 +230,73 @@ export default function App() {
           return m.quantity !== undefined && m.quantity <= lowQuantityThreshold;
         });
 
+        // Format helper for expiry month & year
+        const formatExpiryMonthYear = (dateStr?: string) => {
+          if (!dateStr) return 'N/A';
+          try {
+            const parts = dateStr.split('-');
+            if (parts.length >= 2) {
+              const year = parts[0];
+              const monthNum = parseInt(parts[1], 10);
+              const months = [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+              ];
+              const monthName = months[monthNum - 1] || parts[1];
+              return `${monthName} ${year}`;
+            }
+            const d = new Date(dateStr);
+            if (!isNaN(d.getTime())) {
+              return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            }
+          } catch (e) {
+            console.warn(e);
+          }
+          return dateStr;
+        };
+
         // Loop expiring meds and trigger if not already sent today
         for (const m of expiringMeds) {
           const storageKey = `dawalens_ai_email_exp_${m.id}_${todayStr}`;
           if (!localStorage.getItem(storageKey)) {
             try {
+              const formattedExpiry = formatExpiryMonthYear(m.expirationDate);
               const subject = `⚠️ Expiration Alert: ${m.name} is Expiring Soon`;
-              const text = `DawaLens AI alert: Your medicine ${m.name} (${m.dosage}) is expiring on ${m.expirationDate}.`;
+              const text = `DawaLens AI alert: Your medicine ${m.name} (${m.dosage || ''}) is expiring in ${formattedExpiry}.`;
               const html = `
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e1e8ed; border-radius: 20px; background-color: #ffffff;">
-                  <div style="text-align: center; margin-bottom: 24px;">
-                    <div style="background-color: #fff8f6; color: #ff5232; font-size: 32px; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 12px; font-weight: bold;">⚠️</div>
-                    <h2 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Medicine Expiry Alert</h2>
-                    <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">DawaLens AI Automated Alerts</p>
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; border: 1px solid #f0ece3; border-radius: 24px; background-color: #faf8f5; color: #2d2a26;">
+                  <div style="text-align: center; margin-bottom: 28px;">
+                    <div style="background-color: #fff2f0; color: #ea4335; font-size: 36px; width: 72px; height: 72px; line-height: 72px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 16px; border: 1px solid #ffd4cf;">⚠️</div>
+                    <h2 style="color: #2d2a26; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Medicine Expiry Alert</h2>
+                    <p style="color: #8c857b; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; margin: 6px 0 0 0;">DawaLens AI Automated Alerts</p>
                   </div>
-                  <hr style="border: 0; border-top: 1px solid #e1e8ed; margin-bottom: 24px;" />
-                  <div style="background-color: #fafbfc; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
-                    <p style="margin: 0 0 8px 0; color: #657786; font-size: 12px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Medication Details</p>
-                    <h3 style="margin: 0; color: #1a1a1a; font-size: 20px; font-weight: 700;">${m.name} (${m.dosage})</h3>
-                    <p style="margin: 8px 0 0 0; color: #d32f2f; font-size: 14px; font-weight: bold;">📅 Expiration Date: ${m.expirationDate}</p>
+                  <hr style="border: 0; border-top: 1px solid #f0ece3; margin-bottom: 28px;" />
+                  <div style="background-color: #ffffff; border: 1px solid #eaddca; border-radius: 20px; padding: 24px; margin-bottom: 28px; box-shadow: 0 4px 12px rgba(210,195,170,0.15);">
+                    <p style="margin: 0 0 8px 0; color: #8c857b; font-size: 11px; text-transform: uppercase; font-weight: bold; letter-spacing: 1.5px;">Medication Details</p>
+                    <h3 style="margin: 0; color: #2d2a26; font-size: 22px; font-weight: 800; letter-spacing: -0.3px;">${m.name} ${m.dosage ? `(${m.dosage})` : ''}</h3>
+                    <div style="margin: 16px 0 0 0; padding: 12px 16px; background-color: #fff5f5; border-radius: 12px; border-left: 4px solid #ea4335; color: #b71c1c; font-size: 15px; font-weight: bold;">
+                      📅 Expiration: ${formattedExpiry}
+                    </div>
+                    <p style="margin: 12px 0 0 0; color: #8c857b; font-size: 12px; font-weight: 500;">Full Date: ${m.expirationDate}</p>
                   </div>
-                  <p style="color: #24292e; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
-                    This is an automated safety alert from your DawaLens AI vault. We detected that ${m.name} is entering its warning expiration threshold. Please check the medicine container's condition before use.
+                  <p style="color: #4a453f; font-size: 15px; line-height: 1.6; margin: 0 0 28px 0; text-align: center;">
+                    This is an automated safety alert from your DawaLens AI vault. We detected that <strong>${m.name}</strong> is entering its warning expiration threshold. Please check the medicine container's condition before use.
+                  </p>
+                  <div style="text-align: center; margin-bottom: 28px;">
+                    <a href="https://dawalens.vercel.app" target="_blank" style="background-color: #0f9d58; color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 50px; font-weight: bold; font-size: 14px; display: inline-block; transition: all 0.2s ease-in-out; box-shadow: 0 4px 10px rgba(15,157,88,0.25);">Manage My Vault</a>
+                  </div>
+                  <hr style="border: 0; border-top: 1px solid #f0ece3; margin-bottom: 20px;" />
+                  <p style="color: #a39c91; font-size: 11px; line-height: 1.5; text-align: center; margin: 0; max-width: 480px; margin: 0 auto;">
+                    This notification was generated because you checked the 'Email Notifications Enabled' option in your app configuration. To stop receiving these alerts, toggle email alerts off in your Settings panel.
                   </p>
                 </div>
               `;
 
-              await addDoc(collection(db, 'mail'), {
+              await sendEmailAlert({
                 to: user.email,
-                message: { subject, text, html },
-                timestamp: serverTimestamp()
+                subject,
+                text,
+                html
               });
               localStorage.setItem(storageKey, 'true');
             } catch (err) {
@@ -272,28 +313,38 @@ export default function App() {
               const subject = `💊 Low Stock Alert: Refill ${m.name}`;
               const text = `DawaLens AI alert: Your medicine ${m.name} quantity is down to ${m.quantity}. Please replenish your stocks soon.`;
               const html = `
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e1e8ed; border-radius: 20px; background-color: #ffffff;">
-                  <div style="text-align: center; margin-bottom: 24px;">
-                    <div style="background-color: #f0f7ff; color: #0070f3; font-size: 32px; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 12px; font-weight: bold;">💊</div>
-                    <h2 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Low Stock Warning</h2>
-                    <p style="color: #657786; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold; margin: 4px 0 0 0;">DawaLens AI Replenishment Engine</p>
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; border: 1px solid #f0ece3; border-radius: 24px; background-color: #faf8f5; color: #2d2a26;">
+                  <div style="text-align: center; margin-bottom: 28px;">
+                    <div style="background-color: #f0f7ff; color: #0070f3; font-size: 36px; width: 72px; height: 72px; line-height: 72px; border-radius: 50%; display: inline-block; text-align: center; margin-bottom: 16px; border: 1px solid #c2e0ff;">💊</div>
+                    <h2 style="color: #2d2a26; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Low Stock Warning</h2>
+                    <p style="color: #8c857b; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; margin: 6px 0 0 0;">DawaLens AI Replenishment Engine</p>
                   </div>
-                  <hr style="border: 0; border-top: 1px solid #e1e8ed; margin-bottom: 24px;" />
-                  <div style="background-color: #fafbfc; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
-                    <p style="margin: 0 0 8px 0; color: #657786; font-size: 12px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Current Inventory</p>
-                    <h3 style="margin: 0; color: #1a1a1a; font-size: 20px; font-weight: 700;">${m.name}</h3>
-                    <p style="margin: 8px 0 0 0; color: #0070f3; font-size: 14px; font-weight: bold;">⚠️ Remaining Stock: ${m.quantity} unit(s) left</p>
+                  <hr style="border: 0; border-top: 1px solid #f0ece3; margin-bottom: 28px;" />
+                  <div style="background-color: #ffffff; border: 1px solid #eaddca; border-radius: 20px; padding: 24px; margin-bottom: 28px; box-shadow: 0 4px 12px rgba(210,195,170,0.15);">
+                    <p style="margin: 0 0 8px 0; color: #8c857b; font-size: 11px; text-transform: uppercase; font-weight: bold; letter-spacing: 1.5px;">Current Quantities</p>
+                    <h3 style="margin: 0; color: #2d2a26; font-size: 22px; font-weight: 800; letter-spacing: -0.3px;">${m.name}</h3>
+                    <div style="margin: 16px 0 0 0; padding: 12px 16px; background-color: #f0f7ff; border-radius: 12px; border-left: 4px solid #0070f3; color: #0056b3; font-size: 15px; font-weight: bold;">
+                      ⚠️ Remaining Balance: ${m.quantity || 3} unit(s) left
+                    </div>
                   </div>
-                  <p style="color: #24292e; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
-                    Your supply has fallen below the alerts threshold of ${lowQuantityThreshold} units set in settings. Refill soon to prevent treatment interruption.
+                  <p style="color: #4a453f; font-size: 15px; line-height: 1.6; margin: 0 0 28px 0; text-align: center;">
+                    Your remaining count has dropped below your app's designated low-quantity limit of ${lowQuantityThreshold} units. To preserve treatment consistency and avoid missing required dosages, we recommend scheduling a refill order soon.
+                  </p>
+                  <div style="text-align: center; margin-bottom: 28px;">
+                    <a href="https://dawalens.vercel.app" target="_blank" style="background-color: #0f9d58; color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 50px; font-weight: bold; font-size: 14px; display: inline-block; transition: all 0.2s ease-in-out; box-shadow: 0 4px 10px rgba(15,157,88,0.25);">Go to App Dashboard</a>
+                  </div>
+                  <hr style="border: 0; border-top: 1px solid #f0ece3; margin-bottom: 20px;" />
+                  <p style="color: #a39c91; font-size: 11px; line-height: 1.5; text-align: center; margin: 0; max-width: 480px; margin: 0 auto;">
+                    This is an automated replenishing alert from DawaLens AI. To adjust notification configurations, toggle settings in your <a href="https://dawalens.vercel.app" style="color: #0f9d58; text-decoration: underline; font-weight: bold;">DawaLens Vault</a>.
                   </p>
                 </div>
               `;
 
-              await addDoc(collection(db, 'mail'), {
+              await sendEmailAlert({
                 to: user.email,
-                message: { subject, text, html },
-                timestamp: serverTimestamp()
+                subject,
+                text,
+                html
               });
               localStorage.setItem(storageKey, 'true');
             } catch (err) {
@@ -389,7 +440,7 @@ export default function App() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
-      console.error('Email login error:', error);
+      console.warn('Email login warning:', error);
       if (error.code === 'auth/invalid-credential') {
         setAlertMessage('Invalid email or password. Please check your credentials or sign up if you don\'t have an account.');
       } else if (error.code === 'auth/user-disabled') {
@@ -409,7 +460,7 @@ export default function App() {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
-      console.error('Email sign up error:', error);
+      console.warn('Email sign up warning:', error);
       if (error.code === 'auth/email-already-in-use') {
         setAlertMessage('This email is already in use. Please try logging in instead.');
       } else if (error.code === 'auth/invalid-email') {
@@ -418,6 +469,26 @@ export default function App() {
         setAlertMessage('The password is too weak.');
       } else {
         setAlertMessage('An error occurred during sign up. Please try again.');
+      }
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email || !email.trim()) {
+      setAlertMessage('Please enter your email address in the input field first, then click "Forgot Password" to receive a reset link.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setPasswordResetEmailSent(email.trim());
+    } catch (error: any) {
+      console.warn('Password reset warning:', error);
+      if (error.code === 'auth/user-not-found') {
+        setAlertMessage('No user account found with this email address.');
+      } else if (error.code === 'auth/invalid-email') {
+        setAlertMessage('Please enter a valid email address.');
+      } else {
+        setAlertMessage('Failed to send password reset email: ' + (error.message || String(error)));
       }
     }
   };
@@ -1079,8 +1150,8 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#faf8f5] text-[#1f1f1f] font-sans flex flex-col items-center justify-center p-6">
-        <div className="max-w-md w-full text-center space-y-8">
+      <div className="min-h-screen bg-[#faf8f5] text-[#1f1f1f] font-sans flex flex-col items-center justify-between p-6">
+        <div className="flex-1 flex flex-col items-center justify-center max-w-md w-full text-center space-y-8 my-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -1097,7 +1168,7 @@ export default function App() {
             </p>
           </motion.div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 w-full">
             <p className="text-slate-600 text-sm leading-relaxed font-medium">
               Securely store your medicine data in the cloud. Access your vault from any device, anytime.
             </p>
@@ -1124,7 +1195,7 @@ export default function App() {
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-6 space-y-4 bg-white border border-[#e3e2e0] rounded-[32px] p-6 shadow-sm"
+                  className="mt-6 space-y-4 bg-white border border-[#e3e2e0] rounded-[32px] p-6 shadow-sm text-left"
                 >
                   <div className="flex gap-2 p-1 bg-[#faf8f5] border border-[#e3e2e0]/60 rounded-2xl mb-2">
                     <button 
@@ -1162,6 +1233,18 @@ export default function App() {
                       className="w-full bg-white border border-[#e3e2e0] rounded-xl py-3 px-4 focus:outline-none focus:border-[#0f9d58] focus:ring-2 focus:ring-[#0f9d58]/10 transition-all text-sm text-[#1f1f1f] placeholder:text-slate-400"
                       required
                     />
+
+                    <div className="flex justify-end px-1 pt-1">
+                      <button
+                        id="auth-forgot-password-btn"
+                        type="button"
+                        onClick={handlePasswordReset}
+                        className="text-xs font-bold text-slate-500 hover:text-[#0f9d58] transition-colors underline underline-offset-2"
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
+
                     <button 
                       id="auth-submit-btn"
                       type="submit"
@@ -1181,13 +1264,100 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* Visible compliance footer on the homepage */}
+        <footer className="w-full max-w-md border-t border-[#e3e2e0]/60 mt-12 pt-4 pb-2 flex flex-col sm:flex-row justify-between items-center gap-2 text-[11px] text-slate-400 font-bold">
+          <div>&copy; 2026 DawaLens AI. All rights reserved.</div>
+          <div className="flex gap-4">
+            <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-[#0f9d58] hover:underline">
+              Privacy Policy
+            </a>
+            <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="hover:text-[#0f9d58] hover:underline">
+              Terms of Service
+            </a>
+          </div>
+        </footer>
+
+        {/* Global Dialogues & Popups for the Login/Signup Screen */}
+        <AnimatePresence>
+          {alertMessage && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
+            >
+              <div className="w-full max-w-sm bg-[#faf8f5] border border-[#e3e2e0] rounded-[32px] p-6 text-center shadow-2xl">
+                <div className="w-16 h-16 bg-[#0f9d58]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Info className="text-[#0f9d58]" size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-[#1f1f1f] mb-2">Notice</h3>
+                <p className="text-slate-600 text-sm mb-6">{alertMessage}</p>
+                <button 
+                  onClick={() => setAlertMessage(null)}
+                  className="w-full py-3 bg-[#0f9d58] text-white rounded-xl font-bold hover:bg-[#0f9d58]/95 transition-all shadow-sm"
+                >
+                  OK
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {passwordResetEmailSent && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
+            >
+              <div className="w-full max-w-sm bg-white border border-[#e3e2e0] rounded-[32px] p-6 text-center shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-2 bg-[#0f9d58]" />
+                
+                <div className="w-16 h-16 bg-[#0f9d58]/10 rounded-full flex items-center justify-center mx-auto mb-4 mt-2">
+                  <Mail className="text-[#0f9d58]" size={32} />
+                </div>
+                
+                <h3 className="text-xl font-bold text-[#1f1f1f] mb-2">Check Your Email</h3>
+                
+                <p className="text-slate-600 text-sm leading-relaxed mb-4">
+                  We've sent a secure link to reset your password to:
+                </p>
+                
+                <div className="bg-slate-50 border border-slate-100 rounded-xl py-2 px-3 mb-5 inline-block max-w-full">
+                  <span className="font-mono text-xs text-slate-800 break-all font-bold select-all">
+                    {passwordResetEmailSent}
+                  </span>
+                </div>
+                
+                <p className="text-slate-500 text-[13px] leading-relaxed mb-6">
+                  Please look for a link sent through your mail. Check your inbox and spam folder to complete resetting your password.
+                </p>
+                
+                <button 
+                  onClick={() => setPasswordResetEmailSent(null)}
+                  className="w-full py-3 bg-[#0f9d58] text-white rounded-xl font-bold hover:bg-[#0f9d58]/95 transition-all shadow-sm active:scale-[0.98]"
+                >
+                  Got It, Thanks!
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
 
+  const handleCloseFooterModal = () => {
+    setActiveFooterModal(null);
+    if (openedFromSettings) {
+      setIsSettingsOpen(true);
+      setOpenedFromSettings(false);
+    }
+  };
+
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#faf8f5] text-[#1f1f1f] font-sans selection:bg-[#0f9d58] selection:text-white">
+      <div className="min-h-screen flex flex-col bg-[#faf8f5] text-[#1f1f1f] font-sans selection:bg-[#0f9d58] selection:text-white">
       {/* Glossy Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-[#e3e2e0]/80 px-3 py-3 sm:px-4 sm:py-4 shadow-sm">
         <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
@@ -1242,7 +1412,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto pt-6 pb-32">
+      <main className="flex-1 w-full max-w-2xl mx-auto pt-6 pb-32">
         {/* Stats / Info */}
         <div className="px-4 mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-white border border-[#e3e2e0] rounded-2xl p-3.5 shadow-sm">
@@ -1326,6 +1496,7 @@ export default function App() {
           alertThreshold={alertThreshold}
           onToggleLike={handleToggleLike}
         />
+
       </main>
 
       {/* Floating Action Bar */}
@@ -1457,6 +1628,9 @@ export default function App() {
             onResetToHome={() => { setFilter('all'); setSearchQuery(''); setIsLikedOnly(false); }}
             onToggleLikedOnly={() => setIsLikedOnly(!isLikedOnly)}
             isLikedOnly={isLikedOnly}
+            onOpenGuide={() => { triggerLightHaptic(); setOpenedFromSettings(true); setActiveFooterModal('guide'); }}
+            onOpenPrivacy={() => { triggerLightHaptic(); setOpenedFromSettings(true); setActiveFooterModal('privacy'); }}
+            onOpenTerms={() => { triggerLightHaptic(); setOpenedFromSettings(true); setActiveFooterModal('terms'); }}
           />
         )}
 
@@ -1565,6 +1739,278 @@ export default function App() {
                 OK
               </button>
             </div>
+          </motion.div>
+        )}
+
+        {passwordResetEmailSent && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
+          >
+            <div className="w-full max-w-sm bg-white border border-[#e3e2e0] rounded-[32px] p-6 text-center shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-2 bg-[#0f9d58]" />
+              
+              <div className="w-16 h-16 bg-[#0f9d58]/10 rounded-full flex items-center justify-center mx-auto mb-4 mt-2">
+                <Mail className="text-[#0f9d58]" size={32} />
+              </div>
+              
+              <h3 className="text-xl font-bold text-[#1f1f1f] mb-2">Check Your Email</h3>
+              
+              <p className="text-slate-600 text-sm leading-relaxed mb-4">
+                We've sent a secure link to reset your password to:
+              </p>
+              
+              <div className="bg-slate-50 border border-slate-100 rounded-xl py-2 px-3 mb-5 inline-block max-w-full">
+                <span className="font-mono text-xs text-slate-800 break-all font-bold select-all">
+                  {passwordResetEmailSent}
+                </span>
+              </div>
+              
+              <p className="text-slate-500 text-[13px] leading-relaxed mb-6">
+                Please look for a link sent through your mail. Check your inbox and spam folder to complete resetting your password.
+              </p>
+              
+              <button 
+                onClick={() => setPasswordResetEmailSent(null)}
+                className="w-full py-3 bg-[#0f9d58] text-white rounded-xl font-bold hover:bg-[#0f9d58]/95 transition-all shadow-sm active:scale-[0.98]"
+              >
+                Got It, Thanks!
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {activeFooterModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/40 backdrop-blur-sm overflow-y-auto"
+            onClick={handleCloseFooterModal}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xl bg-white border border-[#e3e2e0] rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-[#e3e2e0]/60 flex items-center justify-between bg-[#faf8f5]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-[#0f9d58]/10 rounded-lg flex items-center justify-center text-[#0f9d58]">
+                    <Pill size={16} className="stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-[#1f1f1f] tracking-tight text-sm sm:text-base">
+                      {activeFooterModal === 'guide' ? 'User Guide & Manual' : 
+                       activeFooterModal === 'privacy' ? 'Privacy Policy' : 'Terms of Service'}
+                    </h3>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleCloseFooterModal}
+                  className="p-1.5 hover:bg-slate-200/60 rounded-full text-slate-400 hover:text-slate-800 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto space-y-6 text-slate-600 text-sm leading-relaxed custom-scrollbar">
+                {activeFooterModal === 'guide' && (
+                  <>
+                    {/* Header Image */}
+                    <div className="rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 relative h-40 sm:h-44 shrink-0 shadow-xs">
+                      <img 
+                        src="https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=600&h=300" 
+                        alt="Medication Tracker" 
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
+                      <div className="absolute bottom-4 left-4 right-4 text-white">
+                        <span className="text-[9px] font-bold uppercase tracking-widest bg-[#0f9d58] px-2.5 py-0.5 rounded-full mb-1.5 inline-block">App Manual</span>
+                        <h4 className="text-base sm:text-lg font-black leading-tight tracking-tight">Master Your Cabinet with DawaLens AI</h4>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <p className="text-slate-500 font-medium text-xs leading-relaxed">
+                        Welcome to your digital medication assistant. DawaLens AI helps you safely catalog, scan, track, and analyze your daily medicine schedules using advanced AI technology.
+                      </p>
+
+                      <div className="space-y-3 pt-1">
+                        {/* Step 1 */}
+                        <div className="flex gap-3 items-start bg-[#faf8f5] p-3.5 rounded-2xl border border-slate-100">
+                          <div className="w-8 h-8 bg-[#0f9d58]/10 text-[#0f9d58] rounded-xl flex items-center justify-center font-black shrink-0 text-sm">
+                            1
+                          </div>
+                          <div className="space-y-0.5">
+                            <h5 className="font-extrabold text-[#1f1f1f] text-xs uppercase tracking-wider">Scan Prescriptions 📸</h5>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              Tap <strong className="text-slate-700">Scan</strong> in the floating bar at the bottom. Position any medication bottle, pill blister, or prescription sheet inside the camera guide. Our built-in Gemini AI will instantly identify the drug name, dosage frequencies, inventory count, and expiration date.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Step 2 */}
+                        <div className="flex gap-3 items-start bg-[#faf8f5] p-3.5 rounded-2xl border border-slate-100">
+                          <div className="w-8 h-8 bg-[#0f9d58]/10 text-[#0f9d58] rounded-xl flex items-center justify-center font-black shrink-0 text-sm">
+                            2
+                          </div>
+                          <div className="space-y-0.5">
+                            <h5 className="font-extrabold text-[#1f1f1f] text-xs uppercase tracking-wider">Add Medicines Manually ✍️</h5>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              Prefer entering details by hand? Tap <strong className="text-slate-700">Manual</strong> to trigger the complete medication form. You can select custom medicine types, color accents, current quantity, threshold triggers, and details on daily schedule alarms.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Step 3 */}
+                        <div className="flex gap-3 items-start bg-[#faf8f5] p-3.5 rounded-2xl border border-slate-100">
+                          <div className="w-8 h-8 bg-[#0f9d58]/10 text-[#0f9d58] rounded-xl flex items-center justify-center font-black shrink-0 text-sm">
+                            3
+                          </div>
+                          <div className="space-y-0.5">
+                            <h5 className="font-extrabold text-[#1f1f1f] text-xs uppercase tracking-wider">Track Intake & Stock Deductions ✅</h5>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              On the main dashboard, simply tap the checkbox next to any medicine to record your dosage. The app automatically subtracts the correct volume or pill count from your active stock and logs the date and time.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Step 4 */}
+                        <div className="flex gap-3 items-start bg-[#faf8f5] p-3.5 rounded-2xl border border-slate-100">
+                          <div className="w-8 h-8 bg-[#0f9d58]/10 text-[#0f9d58] rounded-xl flex items-center justify-center font-black shrink-0 text-sm">
+                            4
+                          </div>
+                          <div className="space-y-0.5">
+                            <h5 className="font-extrabold text-[#1f1f1f] text-xs uppercase tracking-wider">AI Interaction Analysis 🛡️</h5>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              Concerned about combination safety? The system automatically parses your medication list to check for potential severe or moderate drug interactions. Look at the real-time health insights right on your dashboard!
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Step 5 */}
+                        <div className="flex gap-3 items-start bg-[#faf8f5] p-3.5 rounded-2xl border border-slate-100">
+                          <div className="w-8 h-8 bg-[#0f9d58]/10 text-[#0f9d58] rounded-xl flex items-center justify-center font-black shrink-0 text-sm">
+                            5
+                          </div>
+                          <div className="space-y-0.5">
+                            <h5 className="font-extrabold text-[#1f1f1f] text-xs uppercase tracking-wider">Alerts & Configuration 🔔</h5>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              Go to Settings to set custom alert thresholds (e.g. alert 15 or 30 days before expiration), low inventory warnings, and sync options. Enable browser or email notifications to stay fully on top of your daily schedule.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeFooterModal === 'privacy' && (
+                  <div className="space-y-4">
+                    <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 flex gap-3 items-start mb-4">
+                      <Shield className="text-[#0f9d58] shrink-0 mt-0.5" size={18} />
+                      <div>
+                        <h4 className="font-extrabold text-[#1f1f1f] text-xs uppercase tracking-wider mb-1">Your Privacy is Protected</h4>
+                        <p className="text-xs text-emerald-850/80 leading-relaxed font-semibold">
+                          DawaLens AI is dedicated to protecting your personal information and your right to privacy. This privacy policy applies to our application hosted at noorpos.in.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 text-xs">
+                      <div>
+                        <h5 className="font-extrabold text-slate-800 text-[13px] uppercase tracking-wider mb-1">1. What Information We Access and How We Use It</h5>
+                        <p className="text-slate-500 leading-relaxed mb-2">
+                          DawaLens AI is an AI-powered medication scanner and scheduler designed to assist you in organizing your personal medical reminders with maximum privacy in mind.
+                        </p>
+                        <ul className="list-disc pl-5 mt-2 space-y-2 text-slate-500 leading-relaxed">
+                          <li>
+                            <strong className="text-slate-700 font-bold">Medicines & Prescriptions Data:</strong> Any medicine name, dosage, or scheduling frequency you input or scan is saved securely inside your private cloud database (Firebase).
+                          </li>
+                          <li>
+                            <strong className="text-slate-700 font-bold">On-Device Medicine Photos:</strong> Any images or photos captured using your camera are processed strictly on-device in your browser. The captured images are stored locally on your physical device (using secure IndexedDB browser storage) and are <strong>never</strong> uploaded, sent to, or stored in our cloud databases. If you delete a medicine or log out, these local images are permanently purged from your device cache.
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="pt-4 border-t border-slate-100">
+                        <h5 className="font-extrabold text-slate-800 text-[13px] uppercase tracking-wider mb-1">2. Contact Us</h5>
+                        <p className="text-slate-500 leading-relaxed">
+                          If you have any questions, feedback, or concerns regarding your privacy or data protection practices, feel free to contact us at:
+                        </p>
+                        <p className="font-bold text-slate-800 mt-1.5 select-all">
+                          Email: noorpos.alerts@gmail.com
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeFooterModal === 'terms' && (
+                  <div className="space-y-4">
+                    <div className="bg-red-50 p-4 rounded-2xl border border-red-100 flex gap-3 items-start mb-4">
+                      <ShieldAlert className="text-red-600 shrink-0 mt-0.5" size={18} />
+                      <div>
+                        <h4 className="font-extrabold text-red-800 text-xs uppercase tracking-wider mb-1">Medical Disclaimer</h4>
+                        <p className="text-xs text-red-700/95 leading-relaxed font-bold">
+                          DawaLens AI is NOT a clinical tool, medical device, or licensed medical professional. Our features (including AI summaries and drug interaction warnings) are generated by general artificial intelligence models and are subject to errors. Never change, delay, or start medical treatment without directly consulting your doctor or pharmacist.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 text-xs">
+                      <div>
+                        <h5 className="font-extrabold text-slate-800 text-[13px] uppercase tracking-wider mb-1">1. Description of Service</h5>
+                        <p className="text-slate-500 leading-relaxed">
+                          DawaLens AI provides medication barcode/label scanning, scheduling, and smart drug-interaction checking using AI technology. These features are designed strictly for educational and personal organization purposes.
+                        </p>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100">
+                        <h5 className="font-extrabold text-slate-800 text-[13px] uppercase tracking-wider mb-1">2. Privacy, Photos & Personal Data</h5>
+                        <p className="text-slate-500 leading-relaxed">
+                          We respect your privacy. All captured medicine images or photos are kept locally on your own physical device (IndexedDB storage) and are never sent or stored in our cloud environment. All handling of user inputs is done in accordance with our Privacy Policy.
+                        </p>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100">
+                        <h5 className="font-extrabold text-slate-800 text-[13px] uppercase tracking-wider mb-1">3. Limitation of Liability</h5>
+                        <p className="text-slate-500 leading-relaxed">
+                          DawaLens AI is provided "as is" without any guarantees. We are not responsible for any issues resulting from missed doses, data sync failures, or information accuracy errors.
+                        </p>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100">
+                        <h5 className="font-extrabold text-slate-800 text-[13px] uppercase tracking-wider mb-1">4. Governing Law & Contact</h5>
+                        <p className="text-slate-500 leading-relaxed">
+                          For any questions or legal inquiries, please contact us at:
+                        </p>
+                        <p className="font-bold text-slate-800 mt-1.5 select-all">
+                          Email: noorpos.alerts@gmail.com
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-[#e3e2e0]/60 bg-[#faf8f5] flex justify-end shrink-0">
+                <button 
+                  onClick={handleCloseFooterModal}
+                  className="px-6 py-2.5 bg-[#0f9d58] hover:bg-[#0f9d58]/95 text-white rounded-full font-bold text-xs shadow-sm transition-all active:scale-[0.98]"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { initializeFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -93,5 +93,19 @@ export async function setExtractionData(hash: string, data: string): Promise<voi
     });
   } catch (error) {
     console.error("Error in setExtractionData:", error);
+  }
+}
+
+export async function getUserMedicines(userId: string): Promise<any[]> {
+  try {
+    const q = query(
+      collection(db, 'medicines'),
+      where('userId', '==', userId)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error("Error in getUserMedicines:", error);
+    return [];
   }
 }

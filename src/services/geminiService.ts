@@ -87,16 +87,13 @@ export async function chatWithGeminiClient(messages: ChatMessage[]): Promise<str
   }));
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-3.5-flash",
     contents: [
       ...history,
       { role: 'user', parts: [{ text: messages[messages.length - 1].content }] }
     ],
     config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingConfig: {
-        thinkingLevel: 'HIGH' as any
-      }
+      systemInstruction: SYSTEM_INSTRUCTION
     }
   });
 
@@ -120,7 +117,7 @@ export async function extractMedicineDataClient(base64Image: string): Promise<Ex
         Then, identify:
         - Name: Medicine name.
         - Dosage: Strength.
-        - Expiration Date: Format YYYY-MM-DD (use end of month if only MM/YYYY is given).
+        - Expiration Date: Format YYYY-MM-01 (use the 1st day of the month, e.g. 2026-05-01 if May 2026 is given).
         - Usage Instructions: Daily frequency/instructions.
         - Form: tablet, capsule, syrup, ampule, powder, liquid, or other.
         - Quantity: Number of units.` 
@@ -272,16 +269,16 @@ export async function checkDrugInteractions(medicines: { name: string; dosage: s
   }
 }
 
-export async function chatWithAI(messages: ChatMessage[], provider: 'gemini' = 'gemini', userId?: string): Promise<string> {
-  return chatWithGemini(messages, userId);
+export async function chatWithAI(messages: ChatMessage[], provider: 'gemini' = 'gemini', userId?: string, medicines?: any[]): Promise<string> {
+  return chatWithGemini(messages, userId, medicines);
 }
 
-export async function chatWithGemini(messages: ChatMessage[], userId?: string): Promise<string> {
+export async function chatWithGemini(messages: ChatMessage[], userId?: string, medicines?: any[]): Promise<string> {
   try {
     const response = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, userId })
+      body: JSON.stringify({ messages, userId, medicines })
     });
     
     if (!response.ok) {

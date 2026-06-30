@@ -132,6 +132,14 @@ export const MedicineForm: React.FC<MedicineFormProps> = ({
     }
   };
 
+  const getDisplayMonth = (dateStr?: string) => {
+    if (!dateStr) return '';
+    if (dateStr.length >= 7) {
+      return dateStr.substring(0, 7);
+    }
+    return dateStr;
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -364,9 +372,13 @@ export const MedicineForm: React.FC<MedicineFormProps> = ({
                     <div className="relative">
                       <input
                         required
-                        type="date"
-                        value={formData.expirationDate || ''}
-                        onChange={(e) => setFormData({ ...formData, expirationDate: e.target.value })}
+                        type="month"
+                        value={getDisplayMonth(formData.expirationDate)}
+                        onChange={(e) => {
+                          const monthVal = e.target.value;
+                          const fullDateVal = monthVal ? `${monthVal}-01` : '';
+                          setFormData({ ...formData, expirationDate: fullDateVal });
+                        }}
                         className="w-full bg-orange-500/5 border border-orange-500/30 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/60 transition-all [color-scheme:dark] shadow-[0_0_15px_rgba(249,115,22,0.05)]"
                       />
                     </div>

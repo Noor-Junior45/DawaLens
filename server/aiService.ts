@@ -1,4 +1,4 @@
-import { getCachedMedicine, setCachedMedicine, getExtractionData, setExtractionData } from "../medCache";
+import { getCachedMedicine, setCachedMedicine, getExtractionData, setExtractionData, getUserMedicines } from "../medCache";
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 const interactionCache = new Map<string, any>();
@@ -32,7 +32,7 @@ async function runWithRotation<T>(
 ): Promise<T> {
   const keys = getAvailableKeys();
   if (keys.length === 0) {
-    throw new Error("No Gemini API Keys are configured in your environment. Please configure GEMINI_API_KEY, GEMINI_API_KEY_2, or GEMINI_API_KEY_3 in your secrets.");
+    throw new Error("No Gemini API Key is configured in your environment. Please configure GEMINI_API_KEY in your secrets.");
   }
 
   let lastError: any = null;
@@ -55,7 +55,6 @@ async function runWithRotation<T>(
     }
   }
 
-  // If all keys fail, throw detailed error from the last tried key
   throw new Error(getDetailedError(lastError, context));
 }
 
@@ -71,7 +70,7 @@ const getDetailedError = (error: any, context: 'chat' | 'extraction' | 'interact
     msgLower.includes('billing') || 
     msgLower.includes('limit exceeded')
   ) {
-    return "Your project has exceeded its monthly spending cap or quota in Google AI Studio. Please visit https://ai.studio/spend to manage your project spend cap and billing details.";
+    return "Your project has exceeded its monthly spending cap or quota in Google AI Studio.";
   }
   if (msg.includes('400')) {
     if (context === 'extraction') {
@@ -96,7 +95,28 @@ CRITICAL INSTRUCTIONS:
    - Third, only if they have nothing relevant, suggest standard over-the-counter options.
 4. TONE: Exceptionally friendly, conversational, comforting, and supportive. Greet the user with warmth, show deep concern for their health, use highly encouraging words, and keep the dialogue light and engaging like a trusted, caring family doctor. Use Markdown for structured lists and bolding key terms.
 5. NO REPETITIVE DISCLAIMERS: A mandatory safety disclaimer is shown in the UI daily. Do not add "I am an AI..." or "Consult a doctor..." to EVERY message. Only include it if giving high-risk advice.
-6. CONTEXT AWARENESS: Always prioritize the medicines the user already owns. Treat the provided inventory as the absolute source of truth for their 'vault'.`;
+6. CONTEXT AWARENESS: Always prioritize the medicines the user already owns. Treat the provided inventory as the absolute source of truth for their 'vault'.
+
+GUIDELINES:
+1. GREETING:
+   - If user ask questions then give answer remove greeeting.
+   - If the user starts with a simple greeting (e.g., "Hi", "Hello", "How are you?"), reply briefly with a friendly, single-sentence greeting and ask how you can help.
+   - For all other queries (i.e., medical questions, product questions), reply directly and immediately to the user's query. Do not add any extra conversational text.
+   - Always start with a friendly greeting if it is the very first message.
+2. TONE & LANGUAGE:
+   - Be empathetic, polite, and respectful. Use emojis (💊, 🌿, 😊, 🙏) to make the conversation warm.
+   - Use bold text (**) for key medicine names, headings, and important warnings.
+   - **HINGLISH SUPPORT**: If a user selects 'Hinglish' or types in a mix of Hindi and English, you MUST respond in Hinglish. Hinglish is Hindi language written in English script (Roman script), mixed with English medical/technical terms (e.g., "Aapko ye **Paracetamol** din mein do baar khani hai khana khane ke baad. Agar fever kam nahi hota toh doctor se consult karein.").
+   - For other languages, follow the requested translation strictly but maintain the professional pharmacist persona.
+3. MEDICAL QUERIES:
+   - Provide clear, point-wise advice.
+   - Format:
+     1. **[Medicine Name/Remedy]**
+     2. Usage Instructions
+     3. Dietary Tip
+     4. **Warning**
+   - Keep it concise but helpful.
+   - Keep Answer short and clean, aiming for less lines maximum.`;
 
 // Extraction Cache logic
 export async function getExtractionCache(imageHash: string) {
@@ -160,7 +180,7 @@ export async function extractMedicineDataServer(base64Image: string) {
             Then, identify:
             - Name: Medicine name.
             - Dosage: Strength.
-            - Expiration Date: Format YYYY-MM-DD (use end of month if only MM/YYYY is given).
+            - Expiration Date: Format YYYY-MM-01 (use the 1st day of the month, e.g. 2026-05-01 if May 2026 is given).
             - Usage Instructions: Daily frequency/instructions.
             - Form: tablet, capsule, syrup, ampule, powder, liquid, or other.
             - Quantity: Number of units.` 
@@ -240,8 +260,32 @@ export async function checkDrugInteractionsServer(medicines: { name: string; dos
   }
 }
 
-export async function chatWithGeminiServer(messages: any[]) {
+export async function chatWithGeminiServer(messages: any[], userId?: string, medicines?: any[]) {
   try {
+    let userMedicinesContext = "";
+    
+    if (medicines && Array.isArray(medicines) && medicines.length > 0) {
+      const medsStr = medicines.map(m => `- ${m.name} (${m.dosage || 'Dosage: N/A'}, Form: ${m.form || 'N/A'}, Expiry: ${m.expirationDate || 'N/A'}, Qty: ${m.quantity || 'N/A'})`).join('\n');
+      userMedicinesContext = `\n\nCURRENT USER MEDICINES IN VAULT:\n${medsStr}\n\nAlways check and refer to this list to answer about the user's active medicines. If they ask about what they have, or ask for a remedy, meticulously check if they have it here first.`;
+    } else if (userId) {
+      try {
+        const meds = await getUserMedicines(userId);
+        if (meds && meds.length > 0) {
+          const medsStr = meds.map(m => `- ${m.name} (${m.dosage || 'Dosage: N/A'}, Form: ${m.form || 'N/A'}, Expiry: ${m.expirationDate || 'N/A'}, Qty: ${m.quantity || 'N/A'})`).join('\n');
+          userMedicinesContext = `\n\nCURRENT USER MEDICINES IN VAULT:\n${medsStr}\n\nAlways check and refer to this list to answer about the user's active medicines. If they ask about what they have, or ask for a remedy, meticulously check if they have it here first.`;
+        } else {
+          userMedicinesContext = `\n\nCURRENT USER MEDICINES IN VAULT: No medicines found.`;
+        }
+      } catch (err) {
+        console.warn("Error fetching user medicines for chatbot context (permissions or offline), proceeding without database sync:", err);
+        userMedicinesContext = `\n\nCURRENT USER MEDICINES IN VAULT: Database temporary sync unavailable.`;
+      }
+    } else {
+      userMedicinesContext = `\n\nCURRENT USER MEDICINES IN VAULT: No medicines found.`;
+    }
+
+    const systemInstructionWithMeds = SYSTEM_INSTRUCTION + userMedicinesContext;
+
     return await runWithRotation('chat', async (ai) => {
       const history = messages.slice(0, -1).map(m => ({
         role: m.role === 'user' ? 'user' : 'model',
@@ -249,16 +293,13 @@ export async function chatWithGeminiServer(messages: any[]) {
       }));
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3.5-flash",
         contents: [
           ...history,
           { role: 'user', parts: [{ text: messages[messages.length - 1].content }] }
         ],
         config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.HIGH
-          }
+          systemInstruction: systemInstructionWithMeds
         }
       });
 
