@@ -9,7 +9,8 @@ import {
   saveInteractionCache, 
   extractMedicineDataServer, 
   checkDrugInteractionsServer, 
-  chatWithGeminiServer 
+  chatWithGeminiServer,
+  getAvailableKeys
 } from "./server/aiService";
 import { getChatCount, incrementChatCount } from "./medCache";
 
@@ -18,7 +19,7 @@ let transporterInstance: any = null;
 function getTransporter() {
   if (transporterInstance) return transporterInstance;
   
-  const user = process.env.GMAIL_USER || "noorpos.alerts@gmail.com";
+  const user = "noorpos.alerts@gmail.com";
   const pass = process.env.GMAIL_APP_PASSWORD;
   
   if (!pass || pass.trim() === "" || pass === "YOUR_GMAIL_APP_PASSWORD") {
@@ -158,7 +159,7 @@ async function startServer() {
       }
 
       const pass = process.env.GMAIL_APP_PASSWORD;
-      const fromEmail = process.env.GMAIL_USER || "noorpos.alerts@gmail.com";
+      const fromEmail = "noorpos.alerts@gmail.com";
 
       if (!pass || pass.trim() === "" || pass === "YOUR_GMAIL_APP_PASSWORD") {
         console.warn(`[EMAIL NODEMAILER FALLBACK] Simulated sending email to ${to} since GMAIL_APP_PASSWORD is not set.`);
@@ -284,6 +285,28 @@ async function startServer() {
       const { medicines } = req.body;
       const result = await checkDrugInteractionsServer(medicines);
       res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || String(error) });
+    }
+  });
+
+  app.get("/api/ai/key-status", async (req, res) => {
+    try {
+      const keys = getAvailableKeys();
+      if (keys.length > 0) {
+        return res.json({ 
+          hasKey: true, 
+          count: keys.length,
+          checkedAt: new Date().toLocaleTimeString()
+        });
+      } else {
+        return res.json({ 
+          hasKey: false, 
+          count: 0,
+          checkedAt: new Date().toLocaleTimeString(),
+          error: "API key is missing on Vercel environment variables."
+        });
+      }
     } catch (error: any) {
       res.status(500).json({ error: error.message || String(error) });
     }

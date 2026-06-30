@@ -4,14 +4,16 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 const interactionCache = new Map<string, any>();
 
 // Initialize Gemini safely with telemetry header
-const getAvailableKeys = () => {
+export const getAvailableKeys = () => {
   const rawKeys = [
-    { name: 'GEMINI_API_KEY', value: process.env.GEMINI_API_KEY }
+    { name: 'API_KEY', value: process.env.API_KEY },
+    { name: 'GEMINI_API_KEY', value: process.env.GEMINI_API_KEY },
+    { name: 'GIMINI_API_KEY', value: process.env.GIMINI_API_KEY }
   ];
   
   const keys: string[] = [];
   rawKeys.forEach((k) => {
-    if (k.value && k.value.trim() !== '' && !k.value.includes('MY_GEMINI_API_KEY')) {
+    if (k.value && k.value.trim() !== '' && !k.value.includes('MY_GEMINI_API_KEY') && !k.value.includes('YOUR_API_KEY')) {
       const val = k.value.trim();
       keys.push(val);
       const masked = val.length > 10 ? val.substring(0, 6) + '...' + val.slice(-4) : '***';

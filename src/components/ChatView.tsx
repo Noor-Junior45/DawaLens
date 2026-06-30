@@ -44,13 +44,42 @@ export const ChatView: React.FC<ChatViewProps> = ({ onClose, medicines, user, us
   const [activeProvider] = useState<AIProvider>('gemini');
   const [isOnline, setIsOnline] = useState(true);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  const [keyStatus, setKeyStatus] = useState<{ hasKey: boolean; checkedAt?: string; error?: string } | null>(null);
 
   const [chatCount, setChatCount] = useState<number>(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    setIsOnline(true);
+    const checkKeyStatus = async () => {
+      try {
+        const res = await fetch('/api/ai/key-status');
+        const data = await res.json();
+        setKeyStatus(data);
+        if (!data.hasKey) {
+          setIsOnline(false);
+        }
+      } catch (err) {
+        console.error("Failed to check key status:", err);
+        setKeyStatus({ 
+          hasKey: false, 
+          checkedAt: new Date().toLocaleTimeString(), 
+          error: "Failed to connect to server status endpoint." 
+        });
+        setIsOnline(false);
+      }
+    };
+    checkKeyStatus();
   }, []);
+
+  useEffect(() => {
+    if (chatCount >= 10) {
+      setIsOnline(false);
+    } else if (keyStatus && !keyStatus.hasKey) {
+      setIsOnline(false);
+    } else {
+      setIsOnline(true);
+    }
+  }, [chatCount, keyStatus]);
 
   // Load daily chat count
   useEffect(() => {
@@ -371,10 +400,18 @@ Otherwise, please try again once the billing plan or quota is refreshed. Thank y
               
               <div className="flex flex-col">
                 <span className="font-extrabold text-white text-base tracking-tight leading-tight">AI Pharmacist</span>
-                <span className="text-[9px] text-[#e0e1f9] font-black uppercase tracking-widest flex items-center gap-1 mt-0.5">
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-[#34d399]' : 'bg-[#ef4444]'}`} />
-                  {isOnline ? 'ONLINE' : 'OFFLINE'}
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-[#e0e1f9] font-black uppercase tracking-widest flex items-center gap-1.5 mt-0.5 leading-none">
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-[#34d399]' : 'bg-[#ef4444]'}`} />
+                    {isOnline ? 'ONLINE' : 'OFFLINE'}
+                    {chatCount >= 10 && <span className="text-[8px] text-red-200 normal-case font-bold ml-1">(Limit Reached)</span>}
+                  </span>
+                  {keyStatus && !keyStatus.hasKey && (
+                    <span className="text-[7px] text-red-100 font-bold leading-none mt-0.5 tracking-wider uppercase">
+                      ⚠️ Keys Not Found Since {keyStatus.checkedAt || new Date().toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
