@@ -19,8 +19,7 @@ let transporterInstance: any = null;
 function getTransporter() {
   if (transporterInstance) return transporterInstance;
   
-  const rawUser = process.env.GMAIL_USER || process.env.EMAIL_USER || process.env.GMAIL_USERNAME || "noorpos.alerts@gmail.com";
-  const user = rawUser.replace(/['"]+/g, "").trim();
+  const user = "noorpos.alerts@gmail.com";
   
   const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS || process.env.APP_PASSWORD;
   
@@ -165,8 +164,7 @@ async function startServer() {
         return res.status(400).json({ error: "Missing required fields 'to' or 'subject'" });
       }
 
-      const rawUser = process.env.GMAIL_USER || process.env.EMAIL_USER || process.env.GMAIL_USERNAME || "noorpos.alerts@gmail.com";
-      const fromEmail = rawUser.replace(/['"]+/g, "").trim();
+      const fromEmail = "noorpos.alerts@gmail.com";
 
       const pass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS || process.env.APP_PASSWORD;
 
