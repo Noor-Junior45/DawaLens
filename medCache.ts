@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { initializeFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import firebaseConfig from './firebase-applet-config.json';
+import firebaseConfig from './firebase-applet-config.json' with { type: 'json' };
 
 const app = initializeApp(firebaseConfig);
 const db = initializeFirestore(app, {

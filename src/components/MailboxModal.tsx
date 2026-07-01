@@ -149,7 +149,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
         html
       });
 
-      setTestSentSuccess(`Success! A test "${type === 'expiry' ? 'Expiry Alert' : 'Low Stock Warning'}" email was successfully dispatched via SMTP.`);
+      setTestSentSuccess(`Success! A test "${type === 'expiry' ? 'Expiry Alert' : 'Low Stock Warning'}" email was successfully dispatched via Resend API.`);
     } catch (err: any) {
       console.error("Test email dispatch error:", err);
       alert(`Simulation failed: ${err.message || err}`);
@@ -249,18 +249,51 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
           </button>
         </header>
 
-        {/* Action Panel: Clear Logs */}
-        {emails.length > 0 && (
-          <div className="px-4 sm:px-6 py-4 bg-[#fcfaf7] border-b border-[#e3e2e0] shrink-0 flex items-center justify-end">
-            <button
-              onClick={clearSentHistory}
-              className="py-3 sm:py-2 px-4 border border-red-200 bg-red-50 hover:bg-red-100 active:scale-95 rounded-full text-xs text-red-700 font-bold flex items-center justify-center gap-2 transition-all shrink-0 w-full md:w-auto min-h-[44px]"
-            >
-              <Trash2 size={13} />
-              Clear Mail Logs
-            </button>
+        {/* Action Panel: Test Alert & Logs */}
+        <div id="mailbox-action-panel" className="px-4 sm:px-6 py-4 bg-[#fcfaf7] border-b border-[#e3e2e0] shrink-0 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-[#8c857b] flex items-center gap-1.5 shrink-0">
+                <Play size={12} className="text-[#0f9d58]" /> Tester:
+              </span>
+              <button
+                id="btn-trigger-test-email"
+                onClick={() => triggerTestEmailAlert('expiry')}
+                disabled={isSending}
+                className="py-2 px-4 bg-emerald-50 hover:bg-emerald-100 active:scale-95 border border-emerald-200 rounded-full text-xs font-bold text-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-sm min-h-[38px]"
+              >
+                <Send size={12} />
+                Send Test Email
+              </button>
+            </div>
+
+            {emails.length > 0 && (
+              <button
+                id="btn-clear-mail-logs"
+                onClick={clearSentHistory}
+                className="py-2 px-4 border border-red-200 bg-red-50 hover:bg-red-100 active:scale-95 rounded-full text-xs text-red-700 font-bold flex items-center justify-center gap-2 transition-all shrink-0 min-h-[38px]"
+              >
+                <Trash2 size={13} />
+                Clear Mail Logs
+              </button>
+            )}
           </div>
-        )}
+
+          {testSentSuccess && (
+            <div id="test-mail-success-alert" className="flex items-center justify-between p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs text-emerald-800 font-medium">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={14} className="text-[#0f9d58]" />
+                <span>{testSentSuccess}</span>
+              </div>
+              <button 
+                onClick={() => setTestSentSuccess(null)}
+                className="text-emerald-600 hover:text-emerald-800 transition-colors font-bold text-sm px-1.5"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Body Content Areas */}
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
