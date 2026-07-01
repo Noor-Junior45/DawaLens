@@ -1,6 +1,6 @@
 import express from "express";
 import path from "path";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { 
   getExtractionCache, 
   saveExtractionCache, 
@@ -12,107 +12,6 @@ import {
   getAvailableKeys
 } from "./server/aiService";
 import { getChatCount, incrementChatCount } from "./medCache";
-
-let transporterInstance: any = null;
-
-function getGmailCredentials() {
-  const userKeys = [
-    "GMAIL_USER",
-    "GAMIL_USER",
-    "EMAIL_USER",
-    "GMAIL_USERNAME",
-    "GAMIL_USERNAME",
-    "EMAIL_USERNAME",
-    "SENDER_EMAIL"
-  ];
-  
-  const passKeys = [
-    "GMAIL_APP_PASSWORD",
-    "GAMIL_APP_PASSWORD",
-    "GMAIL_PASSWORD",
-    "GAMIL_PASSWORD",
-    "EMAIL_PASSWORD",
-    "GMAIL_APP_PASS",
-    "GAMIL_APP_PASS",
-    "GMAIL_PASS",
-    "GAMIL_PASS",
-    "EMAIL_PASS",
-    "APP_PASSWORD"
-  ];
-
-  let user = "";
-  let resolvedUserKey = "NONE";
-  for (const key of userKeys) {
-    if (process.env[key]) {
-      const val = process.env[key]!.trim();
-      if (val && val !== "YOUR_GMAIL_EMAIL" && val !== "your_email@gmail.com") {
-        user = val.replace(/['"]+/g, "").trim();
-        resolvedUserKey = key;
-        break;
-      }
-    }
-  }
-
-  let cleanPass = "";
-  let resolvedPassKey = "NONE";
-  for (const key of passKeys) {
-    if (process.env[key]) {
-      const val = process.env[key]!.trim();
-      if (val && val !== "YOUR_GMAIL_APP_PASSWORD" && val !== "your_app_password_here") {
-        cleanPass = val.replace(/['"]+/g, "").replace(/\s+/g, "").trim();
-        resolvedPassKey = key;
-        break;
-      }
-    }
-  }
-
-  // Fall back to working user credentials if not configured in the environment
-  if (!user) {
-    user = "noorpos.alerts@gmail.com";
-    resolvedUserKey = "HARDCODED_FALLBACK";
-  }
-  if (!cleanPass) {
-    cleanPass = "wrieavyseptoednt";
-    resolvedPassKey = "HARDCODED_FALLBACK";
-  }
-
-  return { 
-    user, 
-    cleanPass, 
-    resolvedUserKey, 
-    resolvedPassKey, 
-    originalPass: cleanPass 
-  };
-}
-
-function getTransporter() {
-  if (transporterInstance) return transporterInstance;
-  
-  const { user, cleanPass, resolvedUserKey, resolvedPassKey } = getGmailCredentials();
-  
-  if (!cleanPass || cleanPass === "YOUR_GMAIL_APP_PASSWORD") {
-    console.warn(`[NODEMAILER] No valid GMAIL_APP_PASSWORD found. Checked keys: GMAIL_APP_PASSWORD, GAMIL_APP_PASSWORD, etc. Using fallback mode.`);
-    return null;
-  }
-  
-  const maskedPass = cleanPass.length > 6 
-    ? cleanPass.substring(0, 3) + "..." + cleanPass.slice(-3) 
-    : "***";
-  console.log(`[EMAIL TRANSPORTER DEBUG] Initializing transporter for "${user}" (from env key "${resolvedUserKey}") with password length ${cleanPass.length} (from env key "${resolvedPassKey}") (Masked: ${maskedPass})`);
-  
-  transporterInstance = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: user,
-      pass: cleanPass
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
-  
-  return transporterInstance;
-}
 
 const app = express();
 app.set('trust proxy', true);
@@ -223,7 +122,7 @@ app.use(express.json({ limit: '10mb' }));
     res.json({ status: "ok", message: "DawaLens AI Server is running" });
   });
 
-  // Mail Sending Route (Nodemailer) using noorpos.alerts@gmail.com
+  // Mail Sending Route using Resend API
   app.post("/api/send-email", async (req, res) => {
     try {
       const { to, subject, text, html } = req.body;
@@ -231,95 +130,32 @@ app.use(express.json({ limit: '10mb' }));
         return res.status(400).json({ error: "Missing required fields 'to' or 'subject'" });
       }
 
-      const { user: fromEmail, cleanPass, resolvedUserKey, resolvedPassKey } = getGmailCredentials();
-
-      if (!cleanPass || cleanPass === "YOUR_GMAIL_APP_PASSWORD") {
-        console.warn(`[EMAIL NODEMAILER FALLBACK] Simulated sending email to ${to} since GMAIL_APP_PASSWORD is not set. (Checked user key: ${resolvedUserKey}, pass key: ${resolvedPassKey})`);
-        return res.json({ 
-          success: true, 
-          simulated: true, 
-          message: `Email dispatch simulated successfully (configure GMAIL_APP_PASSWORD for real sending). Checked env keys: user=${resolvedUserKey}, pass=${resolvedPassKey}.` 
-        });
+      let apiKey = process.env.RESEND_API_KEY;
+      if (apiKey) {
+        apiKey = apiKey.trim().replace(/^['"]+|['"]+$/g, '');
       }
 
-      const mailOptions = {
-        from: `"DawaLens AI Alert" <${fromEmail}>`,
-        to,
-        subject,
-        text,
-        html
-      };
-
-      // Try sending with different transport options to bypass serverless constraints or dynamic blocks
-      let lastError: any = null;
-      let sentSuccessfully = false;
-
-      const configs = [
-        { name: "Gmail Service (Recommended)", service: "gmail" },
-        { name: "Custom SMTP Port 465", host: "smtp.gmail.com", port: 465, secure: true },
-        { name: "Custom SMTP Port 587", host: "smtp.gmail.com", port: 587, secure: false }
-      ];
-
-      const maskedPass = cleanPass.length > 6 
-        ? cleanPass.substring(0, 3) + "..." + cleanPass.slice(-3) 
-        : "***";
-      console.log(`[EMAIL CREDENTIAL DEBUG] Trying authentication for "${fromEmail}" (from env "${resolvedUserKey}") with password length ${cleanPass.length} (from env "${resolvedPassKey}") (Masked: ${maskedPass})`);
-
-      for (let attempt = 0; attempt < configs.length; attempt++) {
-        const config = configs[attempt];
-        try {
-          console.log(`[EMAIL SEND] Attempt ${attempt + 1}: trying ${config.name} with user: ${fromEmail}...`);
-          
-          let transporter;
-          if ('service' in config) {
-            transporter = nodemailer.createTransport({
-              service: config.service,
-              auth: {
-                user: fromEmail,
-                pass: cleanPass
-              },
-              tls: {
-                rejectUnauthorized: false
-              }
-            });
-          } else {
-            transporter = nodemailer.createTransport({
-              host: config.host,
-              port: config.port,
-              secure: config.secure,
-              auth: {
-                user: fromEmail,
-                pass: cleanPass
-              },
-              connectionTimeout: 10000,
-              greetingTimeout: 10000,
-              socketTimeout: 15000,
-              tls: {
-                rejectUnauthorized: false
-              }
-            });
-          }
-
-          await transporter.sendMail(mailOptions);
-          console.log(`[EMAIL SEND SUCCESS] Email sent to ${to} on attempt ${attempt + 1} (${config.name})`);
-          sentSuccessfully = true;
-          break;
-        } catch (error: any) {
-          console.warn(`[EMAIL SEND WARN] Attempt ${attempt + 1} (${config.name}) failed: ${error.message || String(error)}`);
-          lastError = error;
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+      if (!apiKey) {
+        throw new Error("RESEND_API_KEY environment variable is not configured.");
       }
 
-      if (!sentSuccessfully) {
-        const errMessage = lastError ? (lastError.message || String(lastError)) : "Unknown email error";
-        throw new Error(
-          `${errMessage}. Diagnostics: Checked user key: "${resolvedUserKey}" (${fromEmail}), password key: "${resolvedPassKey}" (length: ${cleanPass.length}). ` +
-          "Note: Gmail SMTP requires 2FA enabled on your Google Account and generating a 16-character 'App Password' under Security settings. Standard passwords will fail."
-        );
+      const resend = new Resend(apiKey);
+      
+      const { data, error } = await resend.emails.send({
+        from: "DawaLens AI <alerts@noorpos.in>",
+        to: [to],
+        subject: subject,
+        text: text || "",
+        html: html || undefined,
+      });
+
+      if (error) {
+        console.error("[RESEND ERROR]", error);
+        throw new Error(error.message || JSON.stringify(error));
       }
 
-      res.json({ success: true, message: "Email sent successfully" });
+      console.log(`[EMAIL SEND SUCCESS] Email sent to ${to} using Resend. Message ID: ${data?.id}`);
+      res.json({ success: true, message: "Email sent successfully", id: data?.id });
     } catch (error: any) {
       console.error("[EMAIL SEND ERROR]", error);
       res.status(500).json({ error: error.message || String(error) });

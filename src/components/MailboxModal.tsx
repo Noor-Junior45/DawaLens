@@ -249,33 +249,9 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
           </button>
         </header>
 
-        {/* Action Panel: Dispatch Tests */}
-        <div className="px-4 sm:px-6 py-4 bg-[#fcfaf7] border-b border-[#e3e2e0] shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
-            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-[#8c857b] flex items-center gap-1.5 shrink-0">
-              <Play size={12} className="text-[#0f9d58]" /> Trigger Tester Alerts:
-            </span>
-            <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2.5 w-full">
-              <button
-                onClick={() => triggerTestEmailAlert('expiry')}
-                disabled={isSending}
-                className="py-3 sm:py-2.5 px-5 sm:px-4 bg-orange-50 hover:bg-orange-100 active:scale-95 border border-orange-200 rounded-full text-xs font-bold text-orange-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
-              >
-                <Send size={12} />
-                Expiry Test Email
-              </button>
-              <button
-                onClick={() => triggerTestEmailAlert('refill')}
-                disabled={isSending}
-                className="py-3 sm:py-2.5 px-5 sm:px-4 bg-blue-50 hover:bg-blue-100 active:scale-95 border border-blue-200 rounded-full text-xs font-bold text-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
-              >
-                <Send size={12} />
-                Refill Stock Warning
-              </button>
-            </div>
-          </div>
-
-          {emails.length > 0 && (
+        {/* Action Panel: Clear Logs */}
+        {emails.length > 0 && (
+          <div className="px-4 sm:px-6 py-4 bg-[#fcfaf7] border-b border-[#e3e2e0] shrink-0 flex items-center justify-end">
             <button
               onClick={clearSentHistory}
               className="py-3 sm:py-2 px-4 border border-red-200 bg-red-50 hover:bg-red-100 active:scale-95 rounded-full text-xs text-red-700 font-bold flex items-center justify-center gap-2 transition-all shrink-0 w-full md:w-auto min-h-[44px]"
@@ -283,8 +259,8 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
               <Trash2 size={13} />
               Clear Mail Logs
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Body Content Areas */}
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">

@@ -1,5 +1,5 @@
 import { getCachedMedicine, setCachedMedicine, getExtractionData, setExtractionData, getUserMedicines } from "../medCache";
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const interactionCache = new Map<string, any>();
 
@@ -13,11 +13,15 @@ export const getAvailableKeys = () => {
   
   const keys: string[] = [];
   rawKeys.forEach((k) => {
-    if (k.value && k.value.trim() !== '' && !k.value.includes('MY_GEMINI_API_KEY') && !k.value.includes('YOUR_API_KEY')) {
-      const val = k.value.trim();
-      keys.push(val);
-      const masked = val.length > 10 ? val.substring(0, 6) + '...' + val.slice(-4) : '***';
-      console.log(`[GEMINI KEYS] Successfully detected and loaded secret "${k.name}" (Masked: ${masked})`);
+    if (k.value) {
+      const val = k.value.trim().replace(/^['"]+|['"]+$/g, '');
+      if (val !== '' && !val.includes('MY_GEMINI_API_KEY') && !val.includes('YOUR_API_KEY')) {
+        keys.push(val);
+        const masked = val.length > 10 ? val.substring(0, 6) + '...' + val.slice(-4) : '***';
+        console.log(`[GEMINI KEYS] Successfully detected and loaded secret "${k.name}" (Masked: ${masked})`);
+      } else {
+        console.log(`[GEMINI KEYS] Secret "${k.name}" is empty or has a default placeholder.`);
+      }
     } else {
       console.log(`[GEMINI KEYS] Secret "${k.name}" is empty or has a default placeholder.`);
     }
