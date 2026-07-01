@@ -10,8 +10,8 @@ import {
   checkDrugInteractionsServer, 
   chatWithGeminiServer,
   getAvailableKeys
-} from "./server/aiService";
-import { getChatCount, incrementChatCount } from "./medCache";
+} from "./server/aiService.js";
+import { getChatCount, incrementChatCount } from "./medCache.js";
 
 const app = express();
 app.set('trust proxy', true);

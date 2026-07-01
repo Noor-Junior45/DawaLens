@@ -1,4 +1,4 @@
-import { getCachedMedicine, setCachedMedicine, getExtractionData, setExtractionData, getUserMedicines } from "../medCache";
+import { getCachedMedicine, setCachedMedicine, getExtractionData, setExtractionData, getUserMedicines } from "../medCache.js";
 import { GoogleGenAI, Type } from "@google/genai";
 
 const interactionCache = new Map<string, any>();
