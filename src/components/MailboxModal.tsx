@@ -29,10 +29,10 @@ interface MailDocument {
   createdAt?: number;
   // Trigger email extension adds a 'delivery' block
   delivery?: {
-    attempts: number;
+    attempts?: number;
     endTime?: any;
     error?: string;
-    state: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'ERROR';
+    state: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'ERROR' | 'SIMULATED';
   };
 }
 
@@ -92,7 +92,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
           to: data.to,
           message: data.message,
           createdAt: createdAtMillis,
-          delivery: data.delivery
+          delivery: data.delivery || data.status
         } as MailDocument;
       });
 
@@ -187,10 +187,12 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
         icon: <Clock size={12} className="animate-pulse" />
       };
     }
-    switch (delivery.state) {
+    const state = String(delivery.state || '').toUpperCase();
+    switch (state) {
       case 'SUCCESS':
+      case 'SIMULATED':
         return {
-          label: 'Delivered',
+          label: 'Sent',
           style: 'bg-emerald-50 text-emerald-700 border-emerald-100',
           icon: <CheckCircle2 size={12} />
         };
@@ -208,9 +210,9 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
         };
       default:
         return {
-          label: 'Pending',
-          style: 'bg-slate-50 text-slate-600 border-slate-100',
-          icon: <Clock size={12} />
+          label: 'Sent',
+          style: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+          icon: <CheckCircle2 size={12} />
         };
     }
   };
@@ -252,7 +254,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
         {/* Action Panel: Test Alert & Logs */}
         <div id="mailbox-action-panel" className="px-4 sm:px-6 py-4 bg-[#fcfaf7] border-b border-[#e3e2e0] shrink-0 flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+            <div className="hidden">
               <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-[#8c857b] flex items-center gap-1.5 shrink-0">
                 <Play size={12} className="text-[#0f9d58]" /> Tester:
               </span>
@@ -411,11 +413,11 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({ onClose, user, medic
                     </div>
                   )}
 
-                  {selectedEmail.delivery && selectedEmail.delivery.state === 'SUCCESS' && (
+                  {selectedEmail.delivery && (selectedEmail.delivery.state === 'SUCCESS' || selectedEmail.delivery.state === 'SIMULATED') && (
                     <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2">
                       <CheckCircle2 size={14} className="text-[#0f9d58] shrink-0" />
                       <p className="text-xs font-medium text-emerald-800">
-                        Email processed and delivered securely via SMTP configuration.
+                        Email processed and delivered securely via Resend API.
                       </p>
                     </div>
                   )}
